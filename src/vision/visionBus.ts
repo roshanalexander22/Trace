@@ -1,4 +1,5 @@
-import type { ProcessedHandFrame } from "../platform/types";
+import type { GestureKind, Point3, ProcessedHandFrame } from "../platform/types";
+import type { HandSlot } from "./handTrackerAssigner";
 
 export interface VisionMetrics {
   fps: number;
@@ -8,8 +9,19 @@ export interface VisionMetrics {
   videoHeight: number;
 }
 
+export interface DetectedHandSummary {
+  slot: HandSlot;
+  handedness: "Left" | "Right" | "Unknown";
+  fingerCount: number;
+  wristX: number;
+  wristY: number;
+  stableGesture: GestureKind;
+  landmarks: Point3[];
+}
+
 export interface VisionFrameEvent {
   frame: ProcessedHandFrame;
+  hands?: DetectedHandSummary[];
   metrics: VisionMetrics;
   timestampMs: number;
 }

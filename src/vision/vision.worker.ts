@@ -1,6 +1,12 @@
 import { HandLandmarker } from "@mediapipe/tasks-vision";
 import initWasm, { WasmVisionPipeline } from "../wasm/trace_wasm.js";
 import type { CalibrationProfile, ProcessedHandFrame } from "../platform/types";
+import {
+  assignHandSlots,
+  createHandTrackerMemory,
+  type HandSlot,
+} from "./handTrackerAssigner";
+import type { DetectedHandSummary } from "./visionBus";
 
 type WorkerInMessage =
   | { type: "INIT"; calibration: CalibrationProfile }
@@ -15,11 +21,15 @@ type WorkerInMessage =
     };
 
 let handLandmarker: HandLandmarker | null = null;
-let pipeline: WasmVisionPipeline | null = null;
+let slotPipelines: Record<HandSlot, WasmVisionPipeline | null> = {
+  Left: null,
+  Right: null,
+};
+let slotMemory = createHandTrackerMemory();
+let lockedPrimarySlot: HandSlot | null = null;
 let activeDelegate: "GPU" | "CPU" = "GPU";
 let wasmReady = false;
 let currentCalibration: CalibrationProfile | null = null;
-let lockedHandedness: "Left" | "Right" | null = null;
 
 async function loadLocalVisionFileset() {
   const loaderUrl = new URL("/wasm/vision_wasm_module_internal.js", self.location.origin).href;
@@ -67,10 +77,15 @@ async function initialize(calibration: CalibrationProfile) {
     await initWasm();
     wasmReady = true;
   }
-  if (!pipeline) {
-    pipeline = new WasmVisionPipeline(calibration);
+  if (!slotPipelines.Left) {
+    slotPipelines.Left = new WasmVisionPipeline(calibration);
   } else {
-    pipeline.update_calibration(calibration);
+    slotPipelines.Left.update_calibration(calibration);
+  }
+  if (!slotPipelines.Right) {
+    slotPipelines.Right = new WasmVisionPipeline(calibration);
+  } else {
+    slotPipelines.Right.update_calibration(calibration);
   }
 
   const preferred = calibration.delegate === "CPU" ? "CPU" : "GPU";
@@ -119,7 +134,8 @@ self.onmessage = async (event: MessageEvent<WorkerInMessage>) => {
   if (msg.type === "UPDATE_CALIBRATION") {
     const prevDelegate = currentCalibration?.delegate;
     currentCalibration = msg.calibration;
-    pipeline?.update_calibration(msg.calibration);
+    slotPipelines.Left?.update_calibration(msg.calibration);
+    slotPipelines.Right?.update_calibration(msg.calibration);
     if (prevDelegate && prevDelegate !== msg.calibration.delegate) {
       await initialize(msg.calibration);
     }
@@ -127,8 +143,10 @@ self.onmessage = async (event: MessageEvent<WorkerInMessage>) => {
   }
 
   if (msg.type === "RESET") {
-    pipeline?.reset();
-    lockedHandedness = null;
+    slotPipelines.Left?.reset();
+    slotPipelines.Right?.reset();
+    slotMemory = createHandTrackerMemory();
+    lockedPrimarySlot = null;
     return;
   }
 
@@ -136,7 +154,9 @@ self.onmessage = async (event: MessageEvent<WorkerInMessage>) => {
     const { bitmap, timestampMs, videoWidth, videoHeight } = msg;
     const t0 = performance.now();
     try {
-      if (!handLandmarker || !pipeline) {
+      const leftPipe = slotPipelines.Left;
+      const rightPipe = slotPipelines.Right;
+      if (!handLandmarker || !leftPipe || !rightPipe) {
         return;
       }
 
@@ -144,8 +164,10 @@ self.onmessage = async (event: MessageEvent<WorkerInMessage>) => {
       const count = result.landmarks?.length ?? 0;
 
       if (count === 0) {
-        lockedHandedness = null;
-        pipeline.reset();
+        lockedPrimarySlot = null;
+        slotMemory = createHandTrackerMemory();
+        leftPipe.reset();
+        rightPipe.reset();
         const emptyFrame: ProcessedHandFrame = {
           detected: false,
           handedness: "Unknown",
@@ -169,6 +191,7 @@ self.onmessage = async (event: MessageEvent<WorkerInMessage>) => {
         self.postMessage({
           type: "FRAME_RESULT",
           frame: emptyFrame,
+          hands: [],
           inferenceMs: performance.now() - t0,
           activeDelegate,
           videoWidth,
@@ -178,42 +201,76 @@ self.onmessage = async (event: MessageEvent<WorkerInMessage>) => {
         return;
       }
 
-      // Stick to the previously locked hand when multiple hands appear
-      let selectedIndex = 0;
-      if (count > 1 && lockedHandedness && result.handedness) {
-        const matchIdx = result.handedness.findIndex(
-          (h) => h?.[0]?.categoryName === lockedHandedness,
-        );
-        if (matchIdx >= 0) selectedIndex = matchIdx;
+      const mirror = currentCalibration?.mirror_feed ?? true;
+      const observations = result.landmarks.map((pts, idx) => {
+        const hLabel = result.handedness?.[idx]?.[0]?.categoryName;
+        const hNorm: "Left" | "Right" | "Unknown" =
+          hLabel === "Left" || hLabel === "Right" ? hLabel : "Unknown";
+        const wristRaw = pts[0] ?? { x: 0.5, y: 0.5, z: 0 };
+        return {
+          index: idx,
+          wristX: mirror ? 1 - wristRaw.x : wristRaw.x,
+          wristY: wristRaw.y,
+          handedness: hNorm,
+        };
+      });
+
+      const assignments = assignHandSlots(observations, slotMemory, timestampMs);
+      if (!slotMemory.Left) leftPipe.reset();
+      if (!slotMemory.Right) rightPipe.reset();
+
+      const processedBySlot: Partial<Record<HandSlot, ProcessedHandFrame>> = {};
+      const hands: DetectedHandSummary[] = [];
+
+      for (const { slot, observationIndex } of assignments) {
+        const rawPts = result.landmarks[observationIndex];
+        const worldPts = result.worldLandmarks?.[observationIndex];
+        const screenFlat = flattenLandmarks(rawPts);
+        const worldFlat = worldPts ? flattenLandmarks(worldPts) : new Float32Array(0);
+        const confidence = result.handedness?.[observationIndex]?.[0]?.score ?? 0.9;
+        const handedCode = slot === "Left" ? 1 : 2;
+
+        const targetPipe = slot === "Left" ? leftPipe : rightPipe;
+        const processed = targetPipe.process_frame(
+          screenFlat,
+          worldFlat,
+          handedCode,
+          timestampMs,
+          confidence,
+        ) as ProcessedHandFrame;
+
+        processedBySlot[slot] = processed;
+        const fs = processed.finger_states;
+        const fingerCount = [fs.thumb, fs.index, fs.middle, fs.ring, fs.pinky].filter(Boolean).length;
+        const wrist = processed.landmarks[0] ?? {
+          x: observations[observationIndex].wristX,
+          y: observations[observationIndex].wristY,
+          z: 0,
+        };
+
+        hands.push({
+          slot,
+          handedness: slot,
+          fingerCount,
+          wristX: wrist.x,
+          wristY: wrist.y,
+          stableGesture: processed.stable_gesture,
+          landmarks: processed.landmarks,
+        });
       }
 
-      const handInfo = result.handedness?.[selectedIndex]?.[0];
-      const handedStr = handInfo?.categoryName;
-      const confidence = handInfo?.score ?? 0.9;
-      let handedCode = 0;
-      if (handedStr === "Left") {
-        handedCode = 1;
-        lockedHandedness = "Left";
-      } else if (handedStr === "Right") {
-        handedCode = 2;
-        lockedHandedness = "Right";
+      if (!lockedPrimarySlot || !processedBySlot[lockedPrimarySlot]) {
+        lockedPrimarySlot = assignments[0]?.slot ?? "Left";
       }
-
-      const screenFlat = flattenLandmarks(result.landmarks[selectedIndex]);
-      const worldPts = result.worldLandmarks?.[selectedIndex];
-      const worldFlat = worldPts ? flattenLandmarks(worldPts) : new Float32Array(0);
-
-      const frame = pipeline.process_frame(
-        screenFlat,
-        worldFlat,
-        handedCode,
-        timestampMs,
-        confidence,
-      ) as ProcessedHandFrame;
+      const primaryFrame =
+        processedBySlot[lockedPrimarySlot] ??
+        processedBySlot.Left ??
+        processedBySlot.Right!;
 
       self.postMessage({
         type: "FRAME_RESULT",
-        frame,
+        frame: primaryFrame,
+        hands,
         inferenceMs: performance.now() - t0,
         activeDelegate,
         videoWidth,

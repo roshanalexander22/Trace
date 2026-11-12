@@ -1,4 +1,6 @@
 use trace_core::drawing::{catmull_rom_spline, simplify_stroke};
+use trace_core::geometry::{evaluate_finger_states, parse_landmarks};
+use trace_core::split::{best_ai_move, SplitAction, SplitState};
 use trace_core::types::{CalibrationProfile, Handedness, StrokePoint};
 use trace_core::VisionPipeline;
 use wasm_bindgen::prelude::*;
@@ -87,5 +89,45 @@ impl WasmVisionPipeline {
         }
         out
     }
+
+    /// Evaluates extended finger count `[0..5]` for secondary hands (used by 2-hand Split mode).
+    pub fn count_hand_fingers(&self, screen_flat: &[f32], world_flat: &[f32]) -> u8 {
+        let cal = self.inner.calibration();
+        let src = if world_flat.len() >= 63 {
+            parse_landmarks(world_flat, cal.mirror_feed)
+        } else {
+            parse_landmarks(screen_flat, cal.mirror_feed)
+        };
+        let Some(pts) = src else {
+            return 0;
+        };
+        let (states, _, valid) = evaluate_finger_states(&pts, cal);
+        if !valid {
+            return 0;
+        }
+        u8::from(states.thumb)
+            + u8::from(states.index)
+            + u8::from(states.middle)
+            + u8::from(states.ring)
+            + u8::from(states.pinky)
+    }
+}
+
+#[wasm_bindgen]
+pub fn wasm_split_apply(state_js: JsValue, action_js: JsValue) -> Result<JsValue, JsValue> {
+    let state: SplitState = serde_wasm_bindgen::from_value(state_js)
+        .map_err(|e| JsValue::from_str(&format!("Invalid split state: {e}")))?;
+    let action: SplitAction = serde_wasm_bindgen::from_value(action_js)
+        .map_err(|e| JsValue::from_str(&format!("Invalid split action: {e}")))?;
+    let next = state.apply(action).map_err(|e| JsValue::from_str(&e))?;
+    serde_wasm_bindgen::to_value(&next).map_err(|e| JsValue::from_str(&e.to_string()))
+}
+
+#[wasm_bindgen]
+pub fn wasm_split_ai_move(state_js: JsValue) -> Result<JsValue, JsValue> {
+    let state: SplitState = serde_wasm_bindgen::from_value(state_js)
+        .map_err(|e| JsValue::from_str(&format!("Invalid split state: {e}")))?;
+    let mv = best_ai_move(&state);
+    serde_wasm_bindgen::to_value(&mv).map_err(|e| JsValue::from_str(&e.to_string()))
 }
 

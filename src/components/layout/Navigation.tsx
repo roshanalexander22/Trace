@@ -1,9 +1,23 @@
-import { Hand, Home, Paintbrush, Pause, Play, Settings, Swords, Volume2, VolumeX } from "lucide-react";
+import {
+  Camera,
+  CameraOff,
+  Hand,
+  Home,
+  Paintbrush,
+  Pause,
+  Play,
+  Settings,
+  Split,
+  Swords,
+  Volume2,
+  VolumeX,
+} from "lucide-react";
 import { useAppStore, type AppMode } from "../../store/useAppStore";
 
 const NAV_ITEMS: Array<{ id: AppMode; label: string; icon: typeof Home }> = [
   { id: "home", label: "Home", icon: Home },
   { id: "rps", label: "RPS Arena", icon: Swords },
+  { id: "split", label: "Split", icon: Split },
   { id: "canvas", label: "Air Canvas", icon: Paintbrush },
   { id: "settings", label: "Settings", icon: Settings },
 ];
@@ -11,6 +25,8 @@ const NAV_ITEMS: Array<{ id: AppMode; label: string; icon: typeof Home }> = [
 export function Navigation() {
   const mode = useAppStore((s) => s.mode);
   const setMode = useAppStore((s) => s.setMode);
+  const cameraEnabled = useAppStore((s) => s.cameraEnabled);
+  const toggleCamera = useAppStore((s) => s.toggleCamera);
   const trackingEnabled = useAppStore((s) => s.trackingEnabled);
   const toggleTracking = useAppStore((s) => s.toggleTracking);
   const soundEnabled = useAppStore((s) => s.soundEnabled);
@@ -51,6 +67,19 @@ export function Navigation() {
       </nav>
 
       <div className="flex items-center gap-2">
+        <button
+          onClick={toggleCamera}
+          title={cameraEnabled ? "Turn Off Camera" : "Turn On Camera"}
+          className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition ${
+            cameraEnabled
+              ? "border-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-100"
+              : "border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100"
+          }`}
+        >
+          {cameraEnabled ? <Camera className="h-3.5 w-3.5" /> : <CameraOff className="h-3.5 w-3.5" />}
+          <span className="hidden md:inline">{cameraEnabled ? "Cam On" : "Cam Off"}</span>
+        </button>
+
         <button
           onClick={() => setSoundEnabled(!soundEnabled)}
           title={soundEnabled ? "Mute Audio" : "Enable Audio"}

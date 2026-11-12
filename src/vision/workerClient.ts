@@ -1,10 +1,11 @@
 import type { CalibrationProfile, ProcessedHandFrame } from "../platform/types";
-import { visionBus } from "./visionBus";
+import { visionBus, type DetectedHandSummary } from "./visionBus";
 
 interface WorkerOutMessage {
   type: "READY" | "FRAME_RESULT" | "ERROR";
   activeDelegate?: "GPU" | "CPU";
   frame?: ProcessedHandFrame;
+  hands?: DetectedHandSummary[];
   inferenceMs?: number;
   videoWidth?: number;
   videoHeight?: number;
@@ -61,6 +62,7 @@ export class VisionWorkerClient {
 
         visionBus.emit({
           frame: msg.frame,
+          hands: msg.hands,
           timestampMs: msg.timestampMs ?? now,
           metrics: {
             fps: this.currentFps,

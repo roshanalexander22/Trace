@@ -7,7 +7,7 @@ import {
   type SystemTelemetryDto,
 } from "../platform/types";
 
-export type AppMode = "home" | "rps" | "canvas" | "settings";
+export type AppMode = "home" | "rps" | "split" | "canvas" | "settings";
 
 export interface LiveTelemetry {
   fps: number;
@@ -24,6 +24,7 @@ export interface LiveTelemetry {
 
 interface AppStoreState {
   mode: AppMode;
+  cameraEnabled: boolean;
   trackingEnabled: boolean;
   soundEnabled: boolean;
   visionReady: boolean;
@@ -33,6 +34,8 @@ interface AppStoreState {
   systemTelemetry: SystemTelemetryDto;
 
   setMode: (mode: AppMode) => void;
+  setCameraEnabled: (enabled: boolean) => void;
+  toggleCamera: () => void;
   setTrackingEnabled: (enabled: boolean) => void;
   toggleTracking: () => void;
   setSoundEnabled: (enabled: boolean) => void;
@@ -46,6 +49,7 @@ interface AppStoreState {
 
 export const useAppStore = create<AppStoreState>((set) => ({
   mode: "home",
+  cameraEnabled: true,
   trackingEnabled: true,
   soundEnabled: true,
   visionReady: false,
@@ -69,6 +73,8 @@ export const useAppStore = create<AppStoreState>((set) => ({
   },
 
   setMode: (mode) => set({ mode }),
+  setCameraEnabled: (cameraEnabled) => set({ cameraEnabled }),
+  toggleCamera: () => set((s) => ({ cameraEnabled: !s.cameraEnabled })),
   setTrackingEnabled: (trackingEnabled) => set({ trackingEnabled }),
   toggleTracking: () => set((s) => ({ trackingEnabled: !s.trackingEnabled })),
   setSoundEnabled: (soundEnabled) => set({ soundEnabled }),

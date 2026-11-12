@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { Navigation } from "./components/layout/Navigation";
 import { StatusBar } from "./components/layout/StatusBar";
@@ -9,17 +9,20 @@ import { AirCanvasPage } from "./pages/AirCanvasPage";
 import { HomePage } from "./pages/HomePage";
 import { RpsArenaPage } from "./pages/RpsArenaPage";
 import { SettingsPage } from "./pages/SettingsPage";
+import { SplitArenaPage } from "./pages/SplitArenaPage";
 import { useAppStore } from "./store/useAppStore";
 
 export function App() {
   const mode = useAppStore((s) => s.mode);
+  const cameraEnabled = useAppStore((s) => s.cameraEnabled);
   const trackingEnabled = useAppStore((s) => s.trackingEnabled);
   const toggleTracking = useAppStore((s) => s.toggleTracking);
   const setCalibration = useAppStore((s) => s.setCalibration);
   const setSystemTelemetry = useAppStore((s) => s.setSystemTelemetry);
+  const cameraBootedRef = useRef(false);
 
   const camera = useCamera();
-  useHandTracking(camera.videoRef, camera.streamActive, trackingEnabled);
+  useHandTracking(camera.videoRef, camera.streamActive, trackingEnabled && cameraEnabled);
 
   useEffect(() => {
     let mounted = true;
@@ -28,9 +31,13 @@ export function App() {
         const cal = await platform.loadCalibration();
         if (!mounted) return;
         setCalibration(cal);
-        await camera.startCamera(cal.preferred_camera_id);
+        cameraBootedRef.current = true;
+        if (useAppStore.getState().cameraEnabled) {
+          await camera.startCamera(cal.preferred_camera_id);
+        }
       } catch {
-        if (mounted) {
+        cameraBootedRef.current = true;
+        if (mounted && useAppStore.getState().cameraEnabled) {
           await camera.startCamera();
         }
       }
@@ -42,6 +49,18 @@ export function App() {
     // Boot camera & calibration once on mount
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Respond when user toggles hardware Camera On / Off
+  useEffect(() => {
+    if (!cameraBootedRef.current) return;
+    if (cameraEnabled) {
+      const preferred = useAppStore.getState().calibration.preferred_camera_id;
+      void camera.startCamera(preferred);
+    } else {
+      camera.stopCamera();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cameraEnabled]);
 
   // Poll lightweight system telemetry (RSS RAM) every 2s
   useEffect(() => {
@@ -73,6 +92,7 @@ export function App() {
       <main className="relative flex-1 overflow-hidden">
         {mode === "home" && <HomePage camera={camera} videoRef={camera.videoRef} />}
         {mode === "rps" && <RpsArenaPage camera={camera} videoRef={camera.videoRef} />}
+        {mode === "split" && <SplitArenaPage camera={camera} videoRef={camera.videoRef} />}
         {mode === "canvas" && <AirCanvasPage camera={camera} videoRef={camera.videoRef} />}
         {mode === "settings" && <SettingsPage camera={camera} />}
       </main>

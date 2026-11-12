@@ -3,6 +3,7 @@ pub mod drawing;
 pub mod geometry;
 pub mod rps;
 pub mod smoothing;
+pub mod split;
 pub mod types;
 
 use classifier::{classify_raw_gesture, map_gesture_to_drawing_state, GestureStabilizer};

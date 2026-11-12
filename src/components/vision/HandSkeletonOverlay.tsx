@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { useAppStore } from "../../store/useAppStore";
 import { visionBus } from "../../vision/visionBus";
 import { mapVideoNormToViewport } from "../../vision/coordinateMapper";
 
@@ -13,22 +14,47 @@ const HAND_CONNECTIONS: Array<[number, number]> = [
 
 const FINGERTIPS = new Set([4, 8, 12, 16, 20]);
 
+const SLOT_PALETTE = {
+  Left: {
+    stroke: "rgba(14, 165, 233, 0.88)",
+    strokeMuted: "rgba(2, 132, 199, 0.35)",
+    joint: "#0284c7",
+    tipIndex: "#e11d48",
+    badgeBg: "rgba(14, 165, 233, 0.92)",
+  },
+  Right: {
+    stroke: "rgba(139, 92, 246, 0.88)",
+    strokeMuted: "rgba(109, 40, 217, 0.35)",
+    joint: "#7c3aed",
+    tipIndex: "#e11d48",
+    badgeBg: "rgba(124, 58, 237, 0.92)",
+  },
+} as const;
+
 interface HandSkeletonOverlayProps {
   className?: string;
   fit?: "cover" | "contain";
   muted?: boolean;
+  showBadges?: boolean;
 }
 
 export function HandSkeletonOverlay({
   className = "",
   fit = "cover",
   muted = false,
+  showBadges = false,
 }: HandSkeletonOverlayProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const cameraEnabled = useAppStore((s) => s.cameraEnabled);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+    if (!cameraEnabled) {
+      const ctx = canvas.getContext("2d");
+      ctx?.clearRect(0, 0, canvas.width, canvas.height);
+      return;
+    }
 
     const resize = () => {
       const parent = canvas.parentElement;
@@ -58,47 +84,90 @@ export function HandSkeletonOverlay({
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, viewW, viewH);
 
-      if (!ev.frame.detected || ev.frame.landmarks.length < 21) {
+      const handsToDraw =
+        ev.hands && ev.hands.length > 0
+          ? ev.hands.filter((h) => h.landmarks.length >= 21)
+          : ev.frame.detected && ev.frame.landmarks.length >= 21
+            ? [
+                {
+                  slot: (ev.frame.handedness === "Right" ? "Right" : "Left") as "Left" | "Right",
+                  fingerCount: 0,
+                  landmarks: ev.frame.landmarks,
+                },
+              ]
+            : [];
+
+      if (handsToDraw.length === 0) {
         ctx.restore();
         return;
       }
 
-      const pts = ev.frame.landmarks.map((lm) =>
-        mapVideoNormToViewport(
-          lm.x,
-          lm.y,
-          ev.metrics.videoWidth,
-          ev.metrics.videoHeight,
-          viewW,
-          viewH,
-          fit,
-        ),
-      );
+      for (const hand of handsToDraw) {
+        const colors = SLOT_PALETTE[hand.slot] ?? SLOT_PALETTE.Left;
+        const pts = hand.landmarks.map((lm) =>
+          mapVideoNormToViewport(
+            lm.x,
+            lm.y,
+            ev.metrics.videoWidth,
+            ev.metrics.videoHeight,
+            viewW,
+            viewH,
+            fit,
+          ),
+        );
 
-      // Draw bones
-      ctx.strokeStyle = muted ? "rgba(2, 132, 199, 0.35)" : "rgba(14, 165, 233, 0.85)";
-      ctx.lineWidth = muted ? 1.5 : 2.5;
-      ctx.lineCap = "round";
-      ctx.beginPath();
-      for (const [a, b] of HAND_CONNECTIONS) {
-        ctx.moveTo(pts[a].x, pts[a].y);
-        ctx.lineTo(pts[b].x, pts[b].y);
-      }
-      ctx.stroke();
-
-      // Draw landmarks
-      for (let i = 0; i < pts.length; i++) {
-        const isTip = FINGERTIPS.has(i);
+        // Draw bones
+        ctx.strokeStyle = muted ? colors.strokeMuted : colors.stroke;
+        ctx.lineWidth = muted ? 1.5 : 2.8;
+        ctx.lineCap = "round";
         ctx.beginPath();
-        ctx.arc(pts[i].x, pts[i].y, isTip ? (muted ? 3.5 : 5.5) : muted ? 2 : 3.5, 0, Math.PI * 2);
-        if (i === 8) {
-          ctx.fillStyle = muted ? "rgba(225, 29, 72, 0.65)" : "#e11d48";
-        } else if (isTip) {
-          ctx.fillStyle = muted ? "rgba(2, 132, 199, 0.55)" : "#ffffff";
-        } else {
-          ctx.fillStyle = muted ? "rgba(100, 116, 139, 0.45)" : "#0284c7";
+        for (const [a, b] of HAND_CONNECTIONS) {
+          ctx.moveTo(pts[a].x, pts[a].y);
+          ctx.lineTo(pts[b].x, pts[b].y);
         }
-        ctx.fill();
+        ctx.stroke();
+
+        // Draw landmarks
+        for (let i = 0; i < pts.length; i++) {
+          const isTip = FINGERTIPS.has(i);
+          ctx.beginPath();
+          ctx.arc(pts[i].x, pts[i].y, isTip ? (muted ? 3.5 : 5.5) : muted ? 2 : 3.6, 0, Math.PI * 2);
+          if (i === 8) {
+            ctx.fillStyle = muted ? "rgba(225, 29, 72, 0.65)" : colors.tipIndex;
+          } else if (isTip) {
+            ctx.fillStyle = muted ? "rgba(2, 132, 199, 0.55)" : "#ffffff";
+          } else {
+            ctx.fillStyle = muted ? "rgba(100, 116, 139, 0.45)" : colors.joint;
+          }
+          ctx.fill();
+          if (isTip && !muted) {
+            ctx.lineWidth = 1.4;
+            ctx.strokeStyle = colors.joint;
+            ctx.stroke();
+          }
+        }
+
+        // Optional floating per-hand slot & finger-count badge near wrist
+        if (showBadges && !muted) {
+          const wrist = pts[0];
+          const label = `${hand.slot[0]} · ${hand.fingerCount}`;
+          ctx.font = "700 11px Inter, system-ui, sans-serif";
+          const padX = 8;
+          const textW = ctx.measureText(label).width;
+          const pillW = textW + padX * 2;
+          const pillH = 22;
+          const bx = Math.max(8, Math.min(viewW - pillW - 8, wrist.x - pillW / 2));
+          const by = Math.max(8, Math.min(viewH - pillH - 8, wrist.y + 14));
+
+          ctx.fillStyle = colors.badgeBg;
+          ctx.beginPath();
+          ctx.roundRect(bx, by, pillW, pillH, 999);
+          ctx.fill();
+
+          ctx.fillStyle = "#ffffff";
+          ctx.textBaseline = "middle";
+          ctx.fillText(label, bx + padX, by + pillH / 2 + 0.5);
+        }
       }
 
       ctx.restore();
@@ -108,7 +177,7 @@ export function HandSkeletonOverlay({
       ro.disconnect();
       unsub();
     };
-  }, [fit, muted]);
+  }, [fit, muted, showBadges, cameraEnabled]);
 
   return (
     <canvas
