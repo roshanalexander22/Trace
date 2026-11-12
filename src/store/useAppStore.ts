@@ -7,7 +7,7 @@ import {
   type SystemTelemetryDto,
 } from "../platform/types";
 
-export type AppMode = "home" | "rps" | "split" | "canvas" | "settings";
+export type AppMode = "home" | "rps" | "split" | "cricket" | "canvas" | "settings";
 
 export interface LiveTelemetry {
   fps: number;

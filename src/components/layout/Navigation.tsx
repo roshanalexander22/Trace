@@ -9,6 +9,7 @@ import {
   Settings,
   Split,
   Swords,
+  Trophy,
   Volume2,
   VolumeX,
 } from "lucide-react";
@@ -18,6 +19,7 @@ const NAV_ITEMS: Array<{ id: AppMode; label: string; icon: typeof Home }> = [
   { id: "home", label: "Home", icon: Home },
   { id: "rps", label: "RPS Arena", icon: Swords },
   { id: "split", label: "Split", icon: Split },
+  { id: "cricket", label: "Hand Cricket", icon: Trophy },
   { id: "canvas", label: "Air Canvas", icon: Paintbrush },
   { id: "settings", label: "Settings", icon: Settings },
 ];

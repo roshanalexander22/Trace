@@ -6,7 +6,8 @@ interface HandAnimationProps {
   pose: RpsMove | "idle" | "pumping";
   beat?: number;
   accent?: "cyan" | "rose" | "emerald" | "amber";
-  fingerCount?: 0 | 1 | 2 | 3 | 4;
+  fingerCount?: 0 | 1 | 2 | 3 | 4 | 5 | 6;
+  dimZero?: boolean;
   mirrored?: boolean;
   facing?: "up" | "down";
   sizeClass?: string;
@@ -37,16 +38,37 @@ const ACCENT_MAP = {
 
 function getFingerExtension(
   pose: RpsMove | "idle" | "pumping",
-  fingerCount?: 0 | 1 | 2 | 3 | 4,
+  fingerCount?: 0 | 1 | 2 | 3 | 4 | 5 | 6,
+  dimZero = true,
 ) {
   if (typeof fingerCount === "number") {
+    if (fingerCount === 6) {
+      return {
+        thumb: true,
+        index: false,
+        middle: false,
+        ring: false,
+        pinky: false,
+        dimmed: false,
+      };
+    }
+    if (fingerCount === 5) {
+      return {
+        thumb: true,
+        index: true,
+        middle: true,
+        ring: true,
+        pinky: true,
+        dimmed: false,
+      };
+    }
     return {
       thumb: false,
       index: fingerCount >= 1,
       middle: fingerCount >= 2,
       ring: fingerCount >= 3,
       pinky: fingerCount >= 4,
-      dimmed: fingerCount === 0,
+      dimmed: fingerCount === 0 && dimZero,
     };
   }
   if (pose === "Paper") {
@@ -64,13 +86,14 @@ export function HandAnimation({
   beat = 0,
   accent = "cyan",
   fingerCount,
+  dimZero = true,
   mirrored = false,
   facing = "up",
   sizeClass = "h-56 w-56",
 }: HandAnimationProps) {
   const uid = useId().replace(/:/g, "");
   const palette = ACCENT_MAP[accent];
-  const ext = getFingerExtension(pose, fingerCount);
+  const ext = getFingerExtension(pose, fingerCount, dimZero);
   const isPumping = pose === "pumping";
   const isScissors = pose === "Scissors" || fingerCount === 2;
 

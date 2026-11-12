@@ -8,6 +8,7 @@ import {
   Sparkles,
   Split,
   Swords,
+  Trophy,
 } from "lucide-react";
 import { useEffect, useState, type RefObject } from "react";
 import { CameraPermissionGuard } from "../components/layout/CameraPermissionGuard";
@@ -71,7 +72,7 @@ export function HomePage({ camera, videoRef }: HomePageProps) {
               Games
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               <button
                 onClick={() => setMode("rps")}
                 className="group flex flex-col justify-between rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-sky-300 hover:shadow-md"
@@ -109,6 +110,24 @@ export function HomePage({ camera, videoRef }: HomePageProps) {
                 </div>
                 <span className="mt-3.5 inline-flex items-center gap-1 text-xs font-semibold text-emerald-600 transition group-hover:translate-x-0.5">
                   Play Split <ArrowRight className="h-3.5 w-3.5" />
+                </span>
+              </button>
+
+              <button
+                onClick={() => setMode("cricket")}
+                className="group flex flex-col justify-between rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-amber-300 hover:shadow-md sm:col-span-2 lg:col-span-1"
+              >
+                <div>
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
+                    <Trophy className="h-5 w-5" />
+                  </div>
+                  <h2 className="mt-2.5 text-base font-bold text-slate-900">Hand Cricket</h2>
+                  <p className="mt-1 text-xs text-slate-600">
+                    0–6 duel with Odd/Even toss, Easy/Medium/Hard fair AI, and two-innings chase.
+                  </p>
+                </div>
+                <span className="mt-3.5 inline-flex items-center gap-1 text-xs font-semibold text-amber-600 transition group-hover:translate-x-0.5">
+                  Play Cricket <ArrowRight className="h-3.5 w-3.5" />
                 </span>
               </button>
             </div>

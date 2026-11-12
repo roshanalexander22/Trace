@@ -6,6 +6,7 @@ import { useCamera } from "./hooks/useCamera";
 import { useHandTracking } from "./hooks/useHandTracking";
 import { platform } from "./platform";
 import { AirCanvasPage } from "./pages/AirCanvasPage";
+import { HandCricketPage } from "./pages/HandCricketPage";
 import { HomePage } from "./pages/HomePage";
 import { RpsArenaPage } from "./pages/RpsArenaPage";
 import { SettingsPage } from "./pages/SettingsPage";
@@ -93,6 +94,7 @@ export function App() {
         {mode === "home" && <HomePage camera={camera} videoRef={camera.videoRef} />}
         {mode === "rps" && <RpsArenaPage camera={camera} videoRef={camera.videoRef} />}
         {mode === "split" && <SplitArenaPage camera={camera} videoRef={camera.videoRef} />}
+        {mode === "cricket" && <HandCricketPage camera={camera} videoRef={camera.videoRef} />}
         {mode === "canvas" && <AirCanvasPage camera={camera} videoRef={camera.videoRef} />}
         {mode === "settings" && <SettingsPage camera={camera} />}
       </main>
