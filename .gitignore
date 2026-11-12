@@ -1,0 +1,14 @@
+node_modules/
+dist/
+target/
+src-tauri/target/
+src/wasm/
+public/wasm/
+public/models/
+*.db
+*.db-wal
+*.db-shm
+.DS_Store
+Thumbs.db
+
+node_modules

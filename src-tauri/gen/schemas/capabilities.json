@@ -1,0 +1,1 @@
+{"default":{"identifier":"default","description":"Default Trace desktop capabilities","local":true,"windows":["main"],"permissions":["core:default","dialog:allow-save","dialog:allow-open","fs:allow-write-file","window-state:default","global-shortcut:allow-register","global-shortcut:allow-unregister"]}}
