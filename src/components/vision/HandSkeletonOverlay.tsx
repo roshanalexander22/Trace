@@ -140,11 +140,6 @@ export function HandSkeletonOverlay({
             ctx.fillStyle = muted ? "rgba(100, 116, 139, 0.45)" : colors.joint;
           }
           ctx.fill();
-          if (isTip && !muted) {
-            ctx.lineWidth = 1.4;
-            ctx.strokeStyle = colors.joint;
-            ctx.stroke();
-          }
         }
 
         // Optional floating per-hand slot & finger-count badge near wrist
@@ -186,4 +181,3 @@ export function HandSkeletonOverlay({
     />
   );
 }
-

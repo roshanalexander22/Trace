@@ -1,20 +1,19 @@
 import { Play, RefreshCw, ShieldCheck } from "lucide-react";
 import { useCallback, useEffect, useRef, type RefObject } from "react";
-import type { CameraState } from "../hooks/useCamera";
+import { CameraPermissionGuard } from "../components/layout/CameraPermissionGuard";
+import { CountdownOverlay } from "../components/rps/CountdownOverlay";
+import { HandAnimation } from "../components/rps/HandAnimation";
+import { MatchResultBanner } from "../components/rps/MatchResultBanner";
+import { Scoreboard } from "../components/rps/Scoreboard";
+import { CameraPreview } from "../components/vision/CameraPreview";
+import { HandSkeletonOverlay } from "../components/vision/HandSkeletonOverlay";
 import { useAudioFeedback } from "../hooks/useAudioFeedback";
+import type { CameraState } from "../hooks/useCamera";
 import { platform } from "../platform";
 import type { GestureKind, RpsMove } from "../platform/types";
 import { useAppStore } from "../store/useAppStore";
 import { useGameStore } from "../store/useGameStore";
 import { visionBus } from "../vision/visionBus";
-import { CameraPermissionGuard } from "../components/layout/CameraPermissionGuard";
-import { CameraPreview } from "../components/vision/CameraPreview";
-import { CameraSelector } from "../components/vision/CameraSelector";
-import { HandSkeletonOverlay } from "../components/vision/HandSkeletonOverlay";
-import { CountdownOverlay } from "../components/rps/CountdownOverlay";
-import { HandAnimation } from "../components/rps/HandAnimation";
-import { MatchResultBanner } from "../components/rps/MatchResultBanner";
-import { Scoreboard } from "../components/rps/Scoreboard";
 
 interface RpsArenaPageProps {
   camera: CameraState;
@@ -111,8 +110,6 @@ export function RpsArenaPage({ camera, videoRef }: RpsArenaPageProps) {
       setPhase("CAPTURE");
       audio.playShoot();
 
-      // Wait briefly after "SHOOT!" so pre-shoot countdown fist frames never get captured,
-      // then collect fresh post-shoot frames and pick the settled RPS gesture.
       const shootAt = performance.now();
       const votes: Record<RpsMove, number> = { Rock: 0, Paper: 0, Scissors: 0 };
 
@@ -198,107 +195,169 @@ export function RpsArenaPage({ camera, videoRef }: RpsArenaPageProps) {
       : "cyan";
 
   return (
-    <div className="mx-auto grid h-full w-full max-w-6xl gap-4 overflow-y-auto p-4 lg:grid-cols-[1.25fr_1fr]">
-      {/* Left: Player Camera Feed */}
-      <div className="flex flex-col gap-3">
-        <div className="relative aspect-video w-full flex-1 overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 shadow-lg min-h-[300px]">
-          {camera.error ? (
-            <CameraPermissionGuard
-              error={camera.error}
-              onRetry={() => void camera.startCamera(camera.activeDeviceId)}
-            />
-          ) : (
-            <>
-              <CameraPreview videoRef={videoRef} stream={camera.stream} mirror={mirror} />
-              <HandSkeletonOverlay />
-              <CountdownOverlay active={phase === "COUNTDOWN" || phase === "CAPTURE"} value={countdownValue} />
-            </>
-          )}
+    <div
+      className="h-full w-full overflow-y-auto p-4 sm:p-5 select-none"
+      style={{
+        backgroundColor: "var(--bg-canvas)",
+        color: "var(--text-primary)",
+      }}
+    >
+      <div className="mx-auto max-w-7xl h-full grid gap-4 lg:grid-cols-[1.38fr_1fr]">
+        {/* Left 58%: Rounded Camera Stage (16px radius) with HUD Controls Floating Inside */}
+        <div className="flex flex-col gap-3 min-w-0">
+          <div
+            className="relative w-full aspect-[4/3] sm:aspect-video rounded-2xl overflow-hidden border shadow-sm"
+            style={{
+              backgroundColor: "var(--bg-well)",
+              borderColor: "var(--border-hairline)",
+            }}
+          >
+            {camera.error ? (
+              <CameraPermissionGuard
+                error={camera.error}
+                onRetry={() => void camera.startCamera(camera.activeDeviceId)}
+              />
+            ) : (
+              <>
+                <CameraPreview videoRef={videoRef} stream={camera.stream} mirror={mirror} />
+                <HandSkeletonOverlay />
+                <CountdownOverlay active={phase === "COUNTDOWN" || phase === "CAPTURE"} value={countdownValue} />
+              </>
+            )}
 
-          {/* Top-left player gesture readout */}
-          <div className="absolute left-3 top-3 flex items-center gap-2 rounded-xl border border-slate-200/90 bg-white/90 px-3 py-1.5 text-xs shadow-md backdrop-blur">
-            <span className="text-slate-500">Your Hand:</span>
-            <span className="font-bold text-sky-700">
-              {detectedRps ?? (live.detected ? "Adjust Pose" : "No Hand")}
-            </span>
+            {/* Top-Left: Player Live Sign Badge */}
+            <div
+              className="absolute top-3 left-3 z-20 flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-medium backdrop-blur-md"
+              style={{
+                backgroundColor: "var(--bg-surface)",
+                borderColor: "var(--border-hairline)",
+                color: "var(--text-primary)",
+              }}
+            >
+              <span style={{ color: "var(--text-secondary)" }}>Your Hand:</span>
+              <span className="font-semibold" style={{ color: detectedRps ? "var(--status-ready)" : "var(--text-primary)" }}>
+                {detectedRps ?? (live.detected ? "Adjusting..." : "No Hand")}
+              </span>
+            </div>
+
+            {/* Top-Right: Pre-Commitment Badge */}
+            {commitmentSha256 && phase === "COUNTDOWN" && (
+              <div
+                className="absolute top-3 right-3 z-20 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11px] font-semibold backdrop-blur-md"
+                style={{
+                  backgroundColor: "var(--bg-surface)",
+                  borderColor: "var(--border-hairline)",
+                  color: "var(--status-ready)",
+                }}
+              >
+                <ShieldCheck className="w-3.5 h-3.5" strokeWidth={1.5} />
+                <span>Move Pre-Locked</span>
+              </div>
+            )}
+
+            {/* Floating HUD Inside Bottom of Frame (Eyes Stay Locked on Hand Feed!) */}
+            <div className="absolute inset-x-3 bottom-3 z-20 flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-xl border backdrop-blur-md"
+              style={{
+                backgroundColor: "var(--bg-surface)",
+                borderColor: "var(--border-hairline)",
+              }}
+            >
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => void startRound()}
+                  disabled={phase === "COUNTDOWN" || phase === "CAPTURE" || Boolean(camera.error)}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold interactive-control disabled:opacity-50"
+                  style={{
+                    backgroundColor: "var(--accent-primary)",
+                    color: "var(--accent-contrast)",
+                  }}
+                >
+                  {phase === "REVEAL" || phase === "NO_GESTURE_RETRY" ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5" strokeWidth={1.5} />
+                      <span>Play Again</span>
+                    </>
+                  ) : (
+                    <>
+                      <Play className="w-3.5 h-3.5" strokeWidth={1.5} />
+                      <span>Start Countdown</span>
+                    </>
+                  )}
+                </button>
+
+                <label
+                  className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg border text-xs cursor-pointer interactive-control"
+                  style={{
+                    backgroundColor: "var(--bg-well)",
+                    borderColor: "var(--border-hairline)",
+                    color: "var(--text-secondary)",
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={autoNextRound}
+                    onChange={(e) => setAutoNextRound(e.target.checked)}
+                    className="accent-[var(--accent-primary)] rounded w-3.5 h-3.5"
+                  />
+                  <span>Auto-Next</span>
+                </label>
+              </div>
+
+              <span className="hidden sm:inline-block text-[11px]" style={{ color: "var(--text-secondary)" }}>
+                Show ✊ Rock, ✋ Paper, or ✌️ Scissors at <strong style={{ color: "var(--text-primary)" }}>SHOOT!</strong>
+              </span>
+            </div>
           </div>
 
-          {commitmentSha256 && phase === "COUNTDOWN" && (
-            <div className="absolute right-3 top-3 inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-white/90 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 shadow-md backdrop-blur">
-              <ShieldCheck className="h-3.5 w-3.5" />
-              AI Move Locked
+          {phase === "NO_GESTURE_RETRY" && (
+            <div
+              className="p-3 rounded-xl border text-xs"
+              style={{
+                backgroundColor: "var(--bg-well)",
+                borderColor: "var(--border-hairline)",
+                color: "var(--accent-primary)",
+              }}
+            >
+              No valid Rock, Paper, or Scissors gesture was detected at capture. Keep your hand inside the frame and hit Play Again.
             </div>
           )}
+
+          <MatchResultBanner result={lastResult} />
         </div>
 
-        {/* Controls */}
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-xs">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => void startRound()}
-              disabled={phase === "COUNTDOWN" || phase === "CAPTURE" || Boolean(camera.error)}
-              className="inline-flex items-center gap-2 rounded-xl bg-sky-600 px-5 py-2.5 text-sm font-bold text-white shadow-md shadow-sky-600/20 transition hover:bg-sky-500 disabled:opacity-50"
+        {/* Right 42%: Opponent Stage (Clean Geometric Target Frame) + Scoreboard */}
+        <div className="flex flex-col gap-3 min-w-0">
+          <div
+            className="flex flex-col items-center justify-center p-5 rounded-2xl border"
+            style={{
+              backgroundColor: "var(--bg-surface)",
+              borderColor: "var(--border-hairline)",
+            }}
+          >
+            <div
+              className="mb-1 text-[10px] font-bold tracking-wider uppercase"
+              style={{ color: "var(--text-secondary)" }}
             >
-              {phase === "REVEAL" || phase === "NO_GESTURE_RETRY" ? (
-                <>
-                  <RefreshCw className="h-4 w-4" />
-                  Play Again
-                </>
-              ) : (
-                <>
-                  <Play className="h-4 w-4" />
-                  Start Countdown
-                </>
-              )}
-            </button>
+              AI Opponent Stage
+            </div>
 
-            <label className="inline-flex cursor-pointer items-center gap-2 text-xs font-medium text-slate-700">
-              <input
-                type="checkbox"
-                checked={autoNextRound}
-                onChange={(e) => setAutoNextRound(e.target.checked)}
-                className="h-4 w-4 rounded accent-sky-600"
-              />
-              Auto-Next Round
-            </label>
+            <HandAnimation pose={aiPose} beat={countdownValue} accent={aiAccent} sizeClass="h-40 w-40" />
+
+            <div
+              className="mt-1 text-xs font-semibold"
+              style={{ color: "var(--text-primary)" }}
+            >
+              {phase === "COUNTDOWN"
+                ? "Locking Gesture..."
+                : phase === "REVEAL" && lastResult
+                  ? `AI Played: ${lastResult.ai_move}`
+                  : "Ready for Next Round"}
+            </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
-            <CameraSelector camera={camera} compact />
-            <span className="text-xs text-slate-500">
-              Show ✊ Rock, ✋ Paper, or ✌️ Scissors at{" "}
-              <strong className="text-slate-800">SHOOT!</strong>
-            </span>
-          </div>
+          <Scoreboard scoreboard={scoreboard} onReset={() => void handleResetScores()} />
         </div>
-
-        {phase === "NO_GESTURE_RETRY" && (
-          <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
-            No valid Rock, Paper, or Scissors gesture was detected at capture. Keep your hand inside
-            the frame and hit <strong>Play Again</strong>.
-          </div>
-        )}
-
-        <MatchResultBanner result={lastResult} />
-      </div>
-
-      {/* Right: AI Companion & Scoreboard */}
-      <div className="flex flex-col gap-4">
-        <div className="flex flex-col items-center justify-center rounded-2xl border border-slate-200 bg-gradient-to-b from-white to-sky-50/70 p-5 shadow-sm">
-          <div className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-500">
-            AI Opponent
-          </div>
-          <HandAnimation pose={aiPose} beat={countdownValue} accent={aiAccent} />
-          <div className="mt-1 text-sm font-bold text-slate-900">
-            {phase === "COUNTDOWN"
-              ? "Locking Move..."
-              : phase === "REVEAL" && lastResult
-                ? `AI Played: ${lastResult.ai_move}`
-                : "Ready to Play"}
-          </div>
-        </div>
-
-        <Scoreboard scoreboard={scoreboard} onReset={() => void handleResetScores()} />
       </div>
     </div>
   );

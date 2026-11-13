@@ -35,21 +35,17 @@ fn now_epoch_secs() -> i64 {
 #[specta::specta]
 pub fn load_calibration(state: State<'_, AppState>) -> Result<CalibrationProfile, String> {
     let conn = state.db.lock().map_err(|e| e.to_string())?;
-    let mut stmt = conn
-        .prepare(
-            "SELECT id, name, finger_curl_threshold_deg, thumb_spread_ratio, stability_frames,
-                    one_euro_min_cutoff, one_euro_beta, one_euro_d_cutoff,
-                    preferred_camera_id, mirror_feed, fps_cap, delegate
-             FROM calibration_profiles WHERE id = 'default' LIMIT 1",
-        )
-        .map_err(|e| e.to_string())?;
-
-    let mut rows = stmt
-        .query_map([], |row| {
+    let res = conn.query_row(
+        "SELECT id, name, finger_curl_threshold_deg, thumb_spread_ratio, stability_frames,
+                one_euro_min_cutoff, one_euro_beta, one_euro_d_cutoff,
+                preferred_camera_id, mirror_feed, fps_cap, delegate
+         FROM calibration_profiles WHERE id = 'default' LIMIT 1",
+        [],
+        |row| {
             let stab: i64 = row.get(4)?;
             let mirror: i64 = row.get(9)?;
             let fps: i64 = row.get(10)?;
-            Ok(CalibrationProfile {
+            let mut profile = CalibrationProfile {
                 id: row.get(0)?,
                 name: row.get(1)?,
                 finger_curl_threshold_deg: row.get(2)?,
@@ -62,14 +58,33 @@ pub fn load_calibration(state: State<'_, AppState>) -> Result<CalibrationProfile
                 mirror_feed: mirror != 0,
                 fps_cap: fps.clamp(10, 120) as u32,
                 delegate: row.get(11)?,
-            })
-        })
-        .map_err(|e| e.to_string())?;
+            };
+            if profile.one_euro_min_cutoff < 3.0 || profile.one_euro_beta < 0.2 || profile.fps_cap < 60 {
+                profile.one_euro_min_cutoff = 4.5;
+                profile.one_euro_beta = 0.5;
+                profile.fps_cap = 60;
+                profile.stability_frames = 3;
+            }
+            Ok(profile)
+        },
+    );
 
-    match rows.next() {
-        Some(res) => res.map_err(|e| e.to_string()),
-        None => Ok(CalibrationProfile::default()),
-    }
+    let profile = match res {
+        Ok(p) => p,
+        Err(rusqlite::Error::QueryReturnedNoRows) => CalibrationProfile::default(),
+        Err(e) => return Err(e.to_string()),
+    };
+
+    let _ = conn.execute(
+        "UPDATE calibration_profiles SET one_euro_min_cutoff = ?1, one_euro_beta = ?2, fps_cap = ?3, stability_frames = ?4 WHERE id = 'default'",
+        rusqlite::params![
+            profile.one_euro_min_cutoff,
+            profile.one_euro_beta,
+            profile.fps_cap as i64,
+            profile.stability_frames as i64
+        ],
+    );
+    Ok(profile)
 }
 
 #[tauri::command]

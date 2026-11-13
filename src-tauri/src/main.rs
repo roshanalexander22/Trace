@@ -1,6 +1,23 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+#[cfg(target_os = "windows")]
+#[allow(non_upper_case_globals)]
+#[no_mangle]
+pub static NvOptimusEnablement: std::os::raw::c_ulong = 0x00000001;
+
+#[cfg(target_os = "windows")]
+#[allow(non_upper_case_globals)]
+#[no_mangle]
+pub static AmdPowerXpressRequestHighPerformance: std::os::raw::c_int = 1;
+
 fn main() {
+    #[cfg(target_os = "windows")]
+    {
+        std::env::set_var(
+            "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS",
+            "--force_high_performance_gpu --force-high-performance-gpu --gpu-preference=2 --ignore-gpu-blocklist --enable-gpu-rasterization --enable-zero-copy",
+        );
+    }
     trace_lib::run()
 }
 

@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { Navigation } from "./components/layout/Navigation";
+import { NavigationRail } from "./components/layout/NavigationRail";
+import { TopHeader } from "./components/layout/TopHeader";
 import { StatusBar } from "./components/layout/StatusBar";
 import { useCamera } from "./hooks/useCamera";
 import { useHandTracking } from "./hooks/useHandTracking";
@@ -15,6 +16,7 @@ import { useAppStore } from "./store/useAppStore";
 
 export function App() {
   const mode = useAppStore((s) => s.mode);
+  const theme = useAppStore((s) => s.theme);
   const cameraEnabled = useAppStore((s) => s.cameraEnabled);
   const trackingEnabled = useAppStore((s) => s.trackingEnabled);
   const toggleTracking = useAppStore((s) => s.toggleTracking);
@@ -24,6 +26,10 @@ export function App() {
 
   const camera = useCamera();
   useHandTracking(camera.videoRef, camera.streamActive, trackingEnabled && cameraEnabled);
+
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+  }, [theme]);
 
   useEffect(() => {
     let mounted = true;
@@ -88,17 +94,31 @@ export function App() {
   }, [toggleTracking]);
 
   return (
-    <div className="flex h-screen w-screen flex-col overflow-hidden bg-gradient-to-br from-slate-50 via-sky-50/40 to-indigo-50/40 text-slate-900">
-      <Navigation />
-      <main className="relative flex-1 overflow-hidden">
-        {mode === "home" && <HomePage camera={camera} videoRef={camera.videoRef} />}
-        {mode === "rps" && <RpsArenaPage camera={camera} videoRef={camera.videoRef} />}
-        {mode === "split" && <SplitArenaPage camera={camera} videoRef={camera.videoRef} />}
-        {mode === "cricket" && <HandCricketPage camera={camera} videoRef={camera.videoRef} />}
-        {mode === "canvas" && <AirCanvasPage camera={camera} videoRef={camera.videoRef} />}
-        {mode === "settings" && <SettingsPage camera={camera} />}
-      </main>
-      <StatusBar />
+    <div
+      className="flex h-screen w-screen overflow-hidden select-none"
+      style={{
+        backgroundColor: "var(--bg-canvas)",
+        color: "var(--text-primary)",
+      }}
+    >
+      {/* 3-Zone Shell: Zone 1 Left Navigation Rail */}
+      <NavigationRail />
+
+      {/* Zone 2 & 3: Main App Area with Top Hardware Strip + Central View + Micro Status */}
+      <div className="flex flex-1 flex-col h-full min-w-0 overflow-hidden">
+        <TopHeader camera={camera} />
+
+        <main className="relative flex-1 overflow-hidden">
+          {mode === "home" && <HomePage camera={camera} videoRef={camera.videoRef} />}
+          {mode === "rps" && <RpsArenaPage camera={camera} videoRef={camera.videoRef} />}
+          {mode === "split" && <SplitArenaPage camera={camera} videoRef={camera.videoRef} />}
+          {mode === "cricket" && <HandCricketPage camera={camera} videoRef={camera.videoRef} />}
+          {mode === "canvas" && <AirCanvasPage camera={camera} videoRef={camera.videoRef} />}
+          {mode === "settings" && <SettingsPage camera={camera} />}
+        </main>
+
+        <StatusBar />
+      </div>
     </div>
   );
 }

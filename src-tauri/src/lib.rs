@@ -24,13 +24,25 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         export::export_artwork_svg,
         export::export_artwork_png,
         system::get_system_telemetry,
+        system::get_gpu_info,
+        system::set_gpu_preference,
+        system::restart_application,
         system::open_camera_privacy_settings,
+        system::open_graphics_settings,
         system::reset_webview_camera_permissions,
     ])
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    #[cfg(target_os = "windows")]
+    {
+        std::env::set_var(
+            "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS",
+            "--force_high_performance_gpu --force-high-performance-gpu --gpu-preference=2 --ignore-gpu-blocklist --enable-gpu-rasterization --enable-zero-copy",
+        );
+    }
+
     let builder = specta_builder();
 
     #[cfg(debug_assertions)]
@@ -44,6 +56,12 @@ pub fn run() {
         .plugin(tauri_plugin_window_state::Builder::default().build())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .setup(|app| {
+            #[cfg(target_os = "windows")]
+            {
+                // Ensure registry entry exists for High Performance GPU
+                let _ = system::apply_gpu_preference("NVIDIA");
+            }
+
             let data_dir = app.path().app_data_dir()?;
             let db_path = data_dir.join("trace.db");
             let conn = db::open_and_migrate(&db_path)

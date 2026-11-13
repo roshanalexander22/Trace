@@ -1,18 +1,70 @@
 @import "tailwindcss";
 
+:root {
+  /* Typography */
+  --font-sans: "Plus Jakarta Sans", "Segoe UI Variable", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", "Cascadia Code", monospace;
+
+  /* Light Mode — Warm Studio Paper */
+  --bg-canvas: #F3F2EE;
+  --bg-surface: #FAF9F6;
+  --bg-well: #EAE8E1;
+  --border-hairline: rgba(22, 22, 24, 0.08);
+  --text-primary: #161618;
+  --text-secondary: #5C5B57;
+  --accent-primary: #D94E28;
+  --accent-contrast: #FFFFFF;
+  --accent-subtle: rgba(217, 78, 40, 0.10);
+  --status-ready: #1E7F5C;
+
+  /* Motion Curves */
+  --ease-glide: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+[data-theme="dark"] {
+  /* Dark Mode — Obsidian Studio */
+  --bg-canvas: #111113;
+  --bg-surface: #18181B;
+  --bg-well: #222226;
+  --border-hairline: rgba(255, 255, 255, 0.08);
+  --text-primary: #F4F4F2;
+  --text-secondary: #9A9994;
+  --accent-primary: #F0643B;
+  --accent-contrast: #111113;
+  --accent-subtle: rgba(240, 100, 59, 0.14);
+  --status-ready: #2BB673;
+}
+
 @layer base {
   html,
   body,
   #root {
     height: 100%;
     margin: 0;
-    overflow-x: hidden;
+    overflow: hidden;
+    font-family: var(--font-sans);
+    background-color: var(--bg-canvas);
+    color: var(--text-primary);
   }
 }
 
+.telemetry-value {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.interactive-control {
+  transition: transform 180ms var(--ease-glide), background-color 180ms var(--ease-glide), border-color 180ms var(--ease-glide);
+}
+
+.interactive-control:active {
+  transform: scale(0.97);
+}
+
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
 }
 
 ::-webkit-scrollbar-track {
@@ -20,11 +72,11 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(100, 116, 139, 0.25);
+  background: var(--border-hairline);
   border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(100, 116, 139, 0.45);
+  background: var(--text-secondary);
 }
 

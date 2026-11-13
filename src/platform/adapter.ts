@@ -2,6 +2,7 @@ import type {
   ArtworkDto,
   ArtworkMetaDto,
   CalibrationProfile,
+  GpuInfoDto,
   RpsCommitmentDto,
   RpsMove,
   RpsResultDto,
@@ -35,7 +36,11 @@ export interface PlatformAdapter {
   exportArtworkPng(title: string, pngBytes: Uint8Array): Promise<string | null>;
 
   getSystemTelemetry(): Promise<SystemTelemetryDto>;
+  getGpuInfo(): Promise<GpuInfoDto>;
+  setGpuPreference(pref: string): Promise<boolean>;
+  restartApplication(): Promise<void>;
   openCameraPrivacySettings(): Promise<void>;
+  openGraphicsSettings(): Promise<void>;
   resetWebviewCameraPermissions(): Promise<boolean>;
 }
 

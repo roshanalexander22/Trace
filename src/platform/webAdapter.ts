@@ -12,6 +12,7 @@ import {
   type ScoreboardSummaryDto,
   type StrokeDto,
   type SystemTelemetryDto,
+  type GpuInfoDto,
 } from "./types";
 
 const CAL_KEY = "trace.calibration.v1";
@@ -233,6 +234,25 @@ export class WebAdapter implements PlatformAdapter {
   }
 
   async openCameraPrivacySettings(): Promise<void> {
+    // Not applicable in browser sandbox
+  }
+
+  async getGpuInfo(): Promise<GpuInfoDto> {
+    return {
+      active_preference: "NVIDIA",
+      detected_gpus: ["WebGL Default Hardware"],
+    };
+  }
+
+  async setGpuPreference(_pref: string): Promise<boolean> {
+    return true;
+  }
+
+  async restartApplication(): Promise<void> {
+    window.location.reload();
+  }
+
+  async openGraphicsSettings(): Promise<void> {
     // Not applicable in browser sandbox
   }
 

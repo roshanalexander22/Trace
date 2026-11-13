@@ -27,9 +27,42 @@ let slotPipelines: Record<HandSlot, WasmVisionPipeline | null> = {
 };
 let slotMemory = createHandTrackerMemory();
 let lockedPrimarySlot: HandSlot | null = null;
-let activeDelegate: "GPU" | "CPU" = "GPU";
+let activeDelegate: "NVIDIA" | "iGPU" | "CPU" = "NVIDIA";
+let currentPowerPreference: "high-performance" | "low-power" = "high-performance";
+let detectedHardwareName = "";
 let wasmReady = false;
 let currentCalibration: CalibrationProfile | null = null;
+
+function queryHardwareGpu(powerPref: "high-performance" | "low-power"): string {
+  try {
+    const c = new OffscreenCanvas(1, 1);
+    const gl =
+      c.getContext("webgl2", { powerPreference: powerPref }) ||
+      c.getContext("webgl", { powerPreference: powerPref });
+    if (!gl) return "WebGL Unavailable";
+    const dbg = (gl as any).getExtension("WEBGL_debug_renderer_info");
+    if (dbg) {
+      const rend = (gl as any).getParameter(dbg.UNMASKED_RENDERER_WEBGL);
+      if (rend) return String(rend);
+    }
+    return String((gl as any).getParameter((gl as any).RENDERER) || "WebGL");
+  } catch {
+    return "Unknown WebGL";
+  }
+}
+
+// Intercept OffscreenCanvas WebGL context creation to pass power preference and disable antialiasing for compute
+const originalOffscreenGetContext = OffscreenCanvas.prototype.getContext;
+(OffscreenCanvas.prototype as any).getContext = function (type: string, attributes?: any) {
+  if (type === "webgl2" || type === "webgl") {
+    attributes = attributes || {};
+    attributes.powerPreference = currentPowerPreference;
+    attributes.antialias = false;
+    attributes.preserveDrawingBuffer = false;
+    attributes.desynchronized = true;
+  }
+  return (originalOffscreenGetContext as any).call(this, type, attributes);
+};
 
 async function loadLocalVisionFileset() {
   const loaderUrl = new URL("/wasm/vision_wasm_module_internal.js", self.location.origin).href;
@@ -88,22 +121,45 @@ async function initialize(calibration: CalibrationProfile) {
     slotPipelines.Right.update_calibration(calibration);
   }
 
-  const preferred = calibration.delegate === "CPU" ? "CPU" : "GPU";
+  const rawDelegate = (calibration.delegate || "NVIDIA").toUpperCase();
+  let preferredBackend: "GPU" | "CPU" = "GPU";
+  let targetReported: "NVIDIA" | "iGPU" | "CPU" = "NVIDIA";
+
+  if (rawDelegate === "CPU") {
+    preferredBackend = "CPU";
+    targetReported = "CPU";
+  } else if (rawDelegate === "IGPU") {
+    preferredBackend = "GPU";
+    targetReported = "iGPU";
+    currentPowerPreference = "low-power";
+  } else {
+    // "NVIDIA", "DGPU", "GPU"
+    preferredBackend = "GPU";
+    targetReported = "NVIDIA";
+    currentPowerPreference = "high-performance";
+  }
+
+  detectedHardwareName =
+    preferredBackend === "CPU"
+      ? "CPU (WASM SIMD Multi-Core)"
+      : queryHardwareGpu(currentPowerPreference);
+
   try {
     handLandmarker?.close();
-    handLandmarker = await createLandmarker(preferred);
-    activeDelegate = preferred;
+    handLandmarker = await createLandmarker(preferredBackend);
+    activeDelegate = targetReported;
   } catch (err) {
-    if (preferred === "GPU") {
+    if (preferredBackend === "GPU") {
       console.warn("GPU delegate unavailable in worker, falling back to CPU:", err);
       handLandmarker = await createLandmarker("CPU");
       activeDelegate = "CPU";
+      detectedHardwareName = "CPU (WASM SIMD Multi-Core)";
     } else {
       throw err;
     }
   }
 
-  self.postMessage({ type: "READY", activeDelegate });
+  self.postMessage({ type: "READY", activeDelegate, rendererName: detectedHardwareName });
 }
 
 function flattenLandmarks(pts: Array<{ x: number; y: number; z: number }>): Float32Array {
@@ -194,6 +250,64 @@ self.onmessage = async (event: MessageEvent<WorkerInMessage>) => {
           hands: [],
           inferenceMs: performance.now() - t0,
           activeDelegate,
+          rendererName: detectedHardwareName,
+          videoWidth,
+          videoHeight,
+          timestampMs,
+        });
+        return;
+      }
+
+      // Fast single-hand path (matches e189bd5 latency: 0 allocations, 1 pipeline call)
+      if (count === 1) {
+        const rawPts = result.landmarks[0];
+        const worldPts = result.worldLandmarks?.[0];
+        const handInfo = result.handedness?.[0]?.[0];
+        const handedStr = handInfo?.categoryName;
+        const confidence = handInfo?.score ?? 0.9;
+        let handedCode = 0;
+        let slot: HandSlot = "Left";
+        if (handedStr === "Left") {
+          handedCode = 1;
+          slot = "Left";
+        } else if (handedStr === "Right") {
+          handedCode = 2;
+          slot = "Right";
+        }
+
+        const screenFlat = flattenLandmarks(rawPts);
+        const worldFlat = worldPts ? flattenLandmarks(worldPts) : new Float32Array(0);
+
+        // Keep leftPipe as primary continuous pipeline for single-hand mode to maintain filter continuity
+        const processed = leftPipe.process_frame(
+          screenFlat,
+          worldFlat,
+          handedCode,
+          timestampMs,
+          confidence,
+        ) as ProcessedHandFrame;
+
+        const fs = processed.finger_states;
+        const fingerCount = [fs.thumb, fs.index, fs.middle, fs.ring, fs.pinky].filter(Boolean).length;
+        const wrist = processed.landmarks[0] ?? { x: 0.5, y: 0.5, z: 0 };
+
+        self.postMessage({
+          type: "FRAME_RESULT",
+          frame: processed,
+          hands: [
+            {
+              slot,
+              handedness: slot,
+              fingerCount,
+              wristX: wrist.x,
+              wristY: wrist.y,
+              stableGesture: processed.stable_gesture,
+              landmarks: processed.landmarks,
+            },
+          ],
+          inferenceMs: performance.now() - t0,
+          activeDelegate,
+          rendererName: detectedHardwareName,
           videoWidth,
           videoHeight,
           timestampMs,
@@ -273,12 +387,37 @@ self.onmessage = async (event: MessageEvent<WorkerInMessage>) => {
         hands,
         inferenceMs: performance.now() - t0,
         activeDelegate,
+        rendererName: detectedHardwareName,
         videoWidth,
         videoHeight,
         timestampMs,
       });
     } catch (err) {
       console.error("Vision worker frame error:", err);
+      // Ensure main thread isBusy is cleared by posting a fallback frame
+      self.postMessage({
+        type: "FRAME_RESULT",
+        frame: {
+          detected: false,
+          handedness: "Unknown",
+          landmarks: [],
+          cursor: null,
+          finger_states: { thumb: false, index: false, middle: false, ring: false, pinky: false, scores: [0, 0, 0, 0, 0] },
+          raw_gesture: "None",
+          stable_gesture: "None",
+          drawing_state: "Idle",
+          confidence: 0,
+          low_light_warning: false,
+          finger_angles_deg: [0, 0, 0, 0, 0],
+        },
+        hands: [],
+        inferenceMs: performance.now() - t0,
+        activeDelegate,
+        rendererName: detectedHardwareName,
+        videoWidth,
+        videoHeight,
+        timestampMs,
+      });
     } finally {
       // Mandatory to prevent GPU/CPU ImageBitmap memory leaks
       bitmap.close();

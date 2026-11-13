@@ -111,7 +111,7 @@ impl VisionPipeline {
         ProcessedHandFrame {
             detected: true,
             handedness,
-            landmarks: smoothed_screen.to_vec(),
+            landmarks: raw_screen.to_vec(),
             cursor,
             finger_states,
             raw_gesture,

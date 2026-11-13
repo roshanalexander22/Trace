@@ -16,47 +16,68 @@ export function MatchResultBanner({ result }: MatchResultBannerProps) {
 
   return (
     <div
-      className={`rounded-2xl border p-4 shadow-xs transition ${
-        isWin
-          ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+      className="p-3.5 rounded-xl border select-none transition"
+      style={{
+        backgroundColor: "var(--bg-surface)",
+        borderColor: isWin
+          ? "var(--status-ready)"
           : isLoss
-            ? "border-rose-200 bg-rose-50 text-rose-900"
-            : "border-amber-200 bg-amber-50 text-amber-900"
-      }`}
+            ? "var(--accent-primary)"
+            : "var(--border-hairline)",
+      }}
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <p className="text-lg font-bold">
-            {isWin ? "You Won This Round!" : isLoss ? "AI Takes This Round" : "It's a Draw!"}
+          <p
+            className="text-sm font-semibold tracking-[-0.01em]"
+            style={{
+              color: isWin
+                ? "var(--status-ready)"
+                : isLoss
+                  ? "var(--accent-primary)"
+                  : "var(--text-primary)",
+            }}
+          >
+            {isWin ? "You Won This Round" : isLoss ? "AI Takes This Round" : "It's a Draw"}
           </p>
-          <p className="text-xs opacity-80">
-            You: <span className="font-semibold">{result.player_move}</span> vs AI:{" "}
-            <span className="font-semibold">{result.ai_move}</span>
+          <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
+            You: <strong style={{ color: "var(--text-primary)" }}>{result.player_move}</strong> · AI:{" "}
+            <strong style={{ color: "var(--text-primary)" }}>{result.ai_move}</strong>
           </p>
         </div>
 
         <button
+          type="button"
           onClick={() => setShowProof((v) => !v)}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-current/25 bg-white/80 px-2.5 py-1 text-xs font-medium hover:bg-white"
+          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-medium interactive-control"
+          style={{
+            backgroundColor: "var(--bg-well)",
+            borderColor: "var(--border-hairline)",
+            color: "var(--text-secondary)",
+          }}
         >
-          <ShieldCheck className="h-3.5 w-3.5" />
-          {showProof ? "Hide Fair Proof" : "Fair Play Proof"}
+          <ShieldCheck className="w-3.5 h-3.5" strokeWidth={1.5} />
+          <span>{showProof ? "Hide Proof" : "Fair Proof"}</span>
         </button>
       </div>
 
       {showProof && (
-        <div className="mt-3 space-y-1 rounded-xl border border-slate-200 bg-white/90 p-3 font-mono text-[11px] text-slate-700">
-          <div className="flex items-center gap-1.5 font-semibold text-emerald-700">
-            <CheckCircle2 className="h-3.5 w-3.5" />
-            AI move locked at countdown 3 before camera capture
+        <div
+          className="mt-2.5 p-2.5 rounded-lg border font-mono text-[10px] space-y-1 telemetry-value"
+          style={{
+            backgroundColor: "var(--bg-well)",
+            borderColor: "var(--border-hairline)",
+            color: "var(--text-secondary)",
+          }}
+        >
+          <div className="flex items-center gap-1.5 font-semibold" style={{ color: "var(--status-ready)" }}>
+            <CheckCircle2 className="w-3 h-3" strokeWidth={1.5} />
+            <span>AI move committed with SHA-256 before camera capture</span>
           </div>
-          <div className="truncate">SHA-256: {result.commitment_sha256}</div>
-          <div className="truncate">
-            Payload: {result.ai_move}:{result.salt_hex}
-          </div>
+          <div className="truncate">Hash: {result.commitment_sha256}</div>
+          <div className="truncate">Payload: {result.ai_move}:{result.salt_hex}</div>
         </div>
       )}
     </div>
   );
 }
-

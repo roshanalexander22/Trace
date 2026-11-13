@@ -1,6 +1,7 @@
 import {
   Circle,
   Download,
+  Droplets,
   Eraser,
   Eye,
   FileImage,
@@ -12,10 +13,11 @@ import {
   Paintbrush,
   Redo2,
   Save,
-  Sparkles,
+  SlidersHorizontal,
   Square,
   Trash2,
   Undo2,
+  X,
 } from "lucide-react";
 import { useState } from "react";
 import type { ArtworkMetaDto } from "../../platform/types";
@@ -28,6 +30,9 @@ import {
 } from "../../store/useDrawingStore";
 
 interface DrawingToolbarProps {
+  artworkTitle: string;
+  setArtworkTitle: (t: string) => void;
+  statusToast: string | null;
   artworks: ArtworkMetaDto[];
   onRefreshArtworks: () => void;
   onOpenArtwork: (id: string) => void;
@@ -39,7 +44,7 @@ interface DrawingToolbarProps {
 const TOOLS: Array<{ id: DrawingTool; label: string; icon: typeof Paintbrush }> = [
   { id: "pen", label: "Pen", icon: Paintbrush },
   { id: "highlighter", label: "Marker", icon: Highlighter },
-  { id: "spray", label: "Airbrush", icon: Sparkles },
+  { id: "spray", label: "Airbrush", icon: Droplets },
   { id: "line", label: "Line", icon: Minus },
   { id: "rect", label: "Rect", icon: Square },
   { id: "circle", label: "Circle", icon: Circle },
@@ -59,6 +64,9 @@ const PATTERNS: Array<{ id: BackgroundPattern; label: string }> = [
 ];
 
 export function DrawingToolbar({
+  artworkTitle,
+  setArtworkTitle,
+  statusToast,
   artworks,
   onRefreshArtworks,
   onOpenArtwork,
@@ -67,6 +75,7 @@ export function DrawingToolbar({
   onExportSvg,
 }: DrawingToolbarProps) {
   const [showSavedMenu, setShowSavedMenu] = useState(false);
+  const [showBrushPopover, setShowBrushPopover] = useState(false);
 
   const tool = useDrawingStore((s) => s.tool);
   const color = useDrawingStore((s) => s.color);
@@ -93,70 +102,115 @@ export function DrawingToolbar({
   const newArtwork = useDrawingStore((s) => s.newArtwork);
 
   return (
-    <div className="relative z-20 flex flex-col gap-2 rounded-2xl border border-slate-200 bg-white/95 px-3 py-2 shadow-sm backdrop-blur">
-      {/* Row 1: Drawing Tools, History & File Actions */}
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-wrap items-center gap-1">
-          {TOOLS.map(({ id, label, icon: Icon }) => {
-            const active = tool === id;
-            return (
-              <button
-                key={id}
-                data-dwell-id={`tool-${id}`}
-                onClick={() => setTool(id)}
-                title={label}
-                className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium transition ${
-                  active
-                    ? id === "eraser"
-                      ? "bg-rose-600 text-white shadow-xs"
-                      : "bg-sky-600 text-white shadow-xs"
-                    : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-                }`}
-              >
-                <Icon className="h-3.5 w-3.5" />
-                <span className="hidden md:inline">{label}</span>
-              </button>
-            );
-          })}
+    <>
+      {/* 1. TOP FLOATING PILL BAR */}
+      <header className="pointer-events-auto absolute left-4 right-4 top-3 z-30 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-surface)]/95 px-3 py-1.5 shadow-sm backdrop-blur-md">
+        {/* Left: Editable Title & Status Toast */}
+        <div className="flex items-center gap-2">
+          <input
+            type="text"
+            value={artworkTitle}
+            onChange={(e) => setArtworkTitle(e.target.value)}
+            aria-label="Artwork Title"
+            className="w-36 rounded-lg border border-[var(--border-hairline)] bg-[var(--bg-canvas)] px-2.5 py-1 text-xs font-semibold text-[var(--text-primary)] outline-none transition focus:border-[var(--accent-primary)] md:w-48"
+            placeholder="Air Sketch"
+          />
+          {statusToast && (
+            <span className="rounded-md border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
+              {statusToast}
+            </span>
+          )}
         </div>
 
-        <div className="flex flex-wrap items-center gap-1.5">
+        {/* Center: History & Patterns & View Mode */}
+        <div className="flex flex-wrap items-center gap-2">
           {/* History */}
-          <div className="flex items-center gap-1 border-r border-slate-200 pr-2">
+          <div className="flex items-center gap-1 border-r border-[var(--border-hairline)] pr-2">
             <button
               data-dwell-id="action-undo"
               onClick={undo}
               disabled={strokesCount === 0}
               title="Undo (Ctrl+Z)"
-              className="rounded-lg bg-slate-100 p-1.5 text-slate-700 transition hover:bg-slate-200 disabled:opacity-40"
+              className="rounded-lg p-1.5 text-[var(--text-secondary)] transition hover:bg-[var(--bg-well)] hover:text-[var(--text-primary)] disabled:opacity-30"
             >
-              <Undo2 className="h-4 w-4" />
+              <Undo2 className="h-3.5 w-3.5" />
             </button>
             <button
               data-dwell-id="action-redo"
               onClick={redo}
               disabled={redoCount === 0}
               title="Redo (Ctrl+Y)"
-              className="rounded-lg bg-slate-100 p-1.5 text-slate-700 transition hover:bg-slate-200 disabled:opacity-40"
+              className="rounded-lg p-1.5 text-[var(--text-secondary)] transition hover:bg-[var(--bg-well)] hover:text-[var(--text-primary)] disabled:opacity-30"
             >
-              <Redo2 className="h-4 w-4" />
+              <Redo2 className="h-3.5 w-3.5" />
             </button>
             <button
               data-dwell-id="action-clear"
               onClick={clear}
               disabled={strokesCount === 0}
               title="Clear Canvas"
-              className="rounded-lg bg-rose-50 p-1.5 text-rose-600 transition hover:bg-rose-100 disabled:opacity-40"
+              className="rounded-lg p-1.5 text-rose-500 transition hover:bg-rose-500/10 disabled:opacity-30"
             >
-              <Trash2 className="h-4 w-4" />
+              <Trash2 className="h-3.5 w-3.5" />
             </button>
           </div>
 
-          {/* File / Export */}
+          {/* Grid pattern segmented */}
+          <div className="hidden items-center gap-0.5 rounded-lg border border-[var(--border-hairline)] bg-[var(--bg-well)] p-0.5 text-[11px] sm:flex">
+            <Grid3x3 className="mx-1 h-3 w-3 text-[var(--text-secondary)]" />
+            {PATTERNS.map((p) => (
+              <button
+                key={p.id}
+                onClick={() => setBackgroundPattern(p.id)}
+                className={`rounded-md px-1.5 py-0.5 font-medium transition ${
+                  backgroundPattern === p.id
+                    ? "bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-2xs font-semibold"
+                    : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                }`}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Camera View Mode */}
+          <div className="flex items-center gap-0.5 rounded-lg border border-[var(--border-hairline)] bg-[var(--bg-well)] p-0.5 text-[11px]">
+            <Eye className="mx-1 h-3 w-3 text-[var(--text-secondary)]" />
+            {CAMERA_MODES.map((m) => (
+              <button
+                key={m.id}
+                onClick={() => setCameraMode(m.id)}
+                className={`rounded-md px-1.5 py-0.5 font-medium transition ${
+                  cameraMode === m.id
+                    ? "bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-2xs font-semibold"
+                    : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                }`}
+              >
+                {m.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Dwell Toggle */}
+          <button
+            onClick={() => setDwellToolbar(!dwellToolbar)}
+            className={`rounded-lg border px-2 py-0.5 text-[11px] font-medium transition ${
+              dwellToolbar
+                ? "border-[var(--accent-primary)] bg-[var(--accent-subtle)] text-[var(--accent-primary)] font-semibold"
+                : "border-[var(--border-hairline)] bg-[var(--bg-well)] text-[var(--text-secondary)]"
+            }`}
+            title="Hover peace sign over tools to select them"
+          >
+            Dwell {dwellToolbar ? "ON" : "OFF"}
+          </button>
+        </div>
+
+        {/* Right: Project Management & Export */}
+        <div className="flex items-center gap-1.5">
           <button
             onClick={newArtwork}
             title="New Blank Canvas"
-            className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+            className="inline-flex items-center gap-1 rounded-lg border border-[var(--border-hairline)] bg-[var(--bg-canvas)] px-2 py-1 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--bg-well)]"
           >
             <FilePlus2 className="h-3.5 w-3.5" />
             <span className="hidden sm:inline">New</span>
@@ -168,19 +222,25 @@ export function DrawingToolbar({
                 onRefreshArtworks();
                 setShowSavedMenu((v) => !v);
               }}
-              className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+              className="inline-flex items-center gap-1 rounded-lg border border-[var(--border-hairline)] bg-[var(--bg-canvas)] px-2 py-1 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--bg-well)]"
             >
               <FolderOpen className="h-3.5 w-3.5" />
               <span className="hidden sm:inline">Open</span>
             </button>
 
             {showSavedMenu && (
-              <div className="absolute right-0 top-full z-40 mt-1.5 w-60 rounded-xl border border-slate-200 bg-white p-2 shadow-xl">
-                <div className="mb-1.5 px-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                  Saved Sketches
+              <div className="absolute right-0 top-full z-50 mt-1.5 w-60 rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-surface)] p-2 shadow-xl">
+                <div className="mb-1.5 flex items-center justify-between px-2 text-[11px] font-semibold uppercase tracking-wider text-[var(--text-secondary)]">
+                  <span>Saved Sketches</span>
+                  <button
+                    onClick={() => setShowSavedMenu(false)}
+                    className="text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
                 </div>
                 {artworks.length === 0 ? (
-                  <p className="px-2 py-3 text-center text-xs text-slate-400">
+                  <p className="px-2 py-3 text-center text-xs text-[var(--text-secondary)]">
                     No saved sketches yet.
                   </p>
                 ) : (
@@ -192,10 +252,12 @@ export function DrawingToolbar({
                           onOpenArtwork(a.id);
                           setShowSavedMenu(false);
                         }}
-                        className="flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-xs text-slate-700 hover:bg-sky-50 hover:text-sky-700"
+                        className="flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-xs text-[var(--text-primary)] hover:bg-[var(--accent-subtle)] hover:text-[var(--accent-primary)]"
                       >
                         <span className="truncate font-medium">{a.title}</span>
-                        <span className="text-[11px] text-slate-400">{a.stroke_count}</span>
+                        <span className="font-mono text-[11px] text-[var(--text-secondary)]">
+                          {a.stroke_count}
+                        </span>
                       </button>
                     ))}
                   </div>
@@ -207,52 +269,99 @@ export function DrawingToolbar({
           <button
             onClick={onSaveProject}
             disabled={strokesCount === 0}
-            className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-40"
+            className="inline-flex items-center gap-1 rounded-lg border border-[var(--border-hairline)] bg-[var(--bg-canvas)] px-2 py-1 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--bg-well)] disabled:opacity-30"
           >
             <Save className="h-3.5 w-3.5" />
-            Save
+            <span className="hidden sm:inline">Save</span>
           </button>
+
           <button
             onClick={onExportPng}
             disabled={strokesCount === 0}
-            className="inline-flex items-center gap-1 rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 py-1.5 text-xs font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-40"
+            className="inline-flex items-center gap-1 rounded-lg border border-[var(--border-hairline)] bg-[var(--bg-canvas)] px-2 py-1 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--bg-well)] disabled:opacity-30"
           >
             <FileImage className="h-3.5 w-3.5" />
-            PNG
+            <span>PNG</span>
           </button>
+
           <button
             onClick={onExportSvg}
             disabled={strokesCount === 0}
-            className="inline-flex items-center gap-1 rounded-lg bg-sky-600 px-2.5 py-1.5 text-xs font-semibold text-white shadow-2xs hover:bg-sky-500 disabled:opacity-40"
+            className="inline-flex items-center gap-1 rounded-lg bg-[var(--accent-primary)] px-2.5 py-1 text-xs font-semibold text-white shadow-2xs hover:opacity-90 disabled:opacity-30"
           >
             <Download className="h-3.5 w-3.5" />
-            SVG
+            <span>SVG</span>
           </button>
         </div>
-      </div>
+      </header>
 
-      {/* Row 2: Color Picker, Size, Ink Opacity, Board Opacity & Canvas Options */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-2">
-        {/* Colors + Custom Color Wheel */}
-        <div className="flex items-center gap-1.5">
+      {/* 2. LEFT FLOATING VERTICAL DOCK */}
+      <aside className="pointer-events-auto absolute left-4 top-16 z-30 flex flex-col items-center gap-1 rounded-2xl border border-[var(--border-hairline)] bg-[var(--bg-surface)]/95 p-1.5 shadow-md backdrop-blur-md">
+        {/* Tool Buttons */}
+        {TOOLS.map(({ id, label, icon: Icon }) => {
+          const active = tool === id;
+          return (
+            <button
+              key={id}
+              data-dwell-id={`tool-${id}`}
+              onClick={() => setTool(id)}
+              title={label}
+              className={`relative flex h-8 w-8 items-center justify-center rounded-xl transition ${
+                active
+                  ? id === "eraser"
+                    ? "bg-rose-500 text-white shadow-xs"
+                    : "bg-[var(--accent-primary)] text-white shadow-xs"
+                  : "text-[var(--text-secondary)] hover:bg-[var(--bg-well)] hover:text-[var(--text-primary)]"
+              }`}
+            >
+              <Icon className="h-4 w-4" />
+            </button>
+          );
+        })}
+
+        {/* Divider */}
+        <div className="my-1 h-[1px] w-6 bg-[var(--border-hairline)]" />
+
+        {/* Sliders Popover Trigger */}
+        <button
+          onClick={() => setShowBrushPopover((v) => !v)}
+          title="Adjust Brush Size, Ink & Board Opacity"
+          className={`flex h-8 w-8 items-center justify-center rounded-xl transition ${
+            showBrushPopover
+              ? "bg-[var(--accent-subtle)] text-[var(--accent-primary)]"
+              : "text-[var(--text-secondary)] hover:bg-[var(--bg-well)] hover:text-[var(--text-primary)]"
+          }`}
+        >
+          <SlidersHorizontal className="h-4 w-4" />
+        </button>
+
+        {/* Divider */}
+        <div className="my-1 h-[1px] w-6 bg-[var(--border-hairline)]" />
+
+        {/* Vertical Color Swatches */}
+        <div className="flex flex-col items-center gap-1.5">
           {PALETTE_COLORS.map((c) => (
             <button
               key={c}
               data-dwell-id={`color-${c}`}
               onClick={() => setColor(c)}
               title={`Color ${c}`}
-              className={`h-6 w-6 rounded-full border-2 transition ${
+              className={`h-5 w-5 rounded-full border transition ${
                 tool !== "eraser" && color === c
-                  ? "scale-110 border-slate-900 ring-2 ring-sky-500/40"
-                  : "border-slate-200 hover:scale-105"
+                  ? "scale-115 border-[var(--text-primary)] ring-2 ring-[var(--accent-primary)]/40"
+                  : "border-black/10 hover:scale-105"
               }`}
               style={{ backgroundColor: c }}
             />
           ))}
+
+          {/* Custom Color Wheel */}
           <label
             title="Custom Color"
-            className="relative ml-0.5 flex h-6 w-6 cursor-pointer items-center justify-center overflow-hidden rounded-full border border-slate-300 shadow-2xs"
-            style={{ background: "conic-gradient(#ef4444,#eab308,#22c55e,#0ea5e9,#8b5cf6,#ef4444)" }}
+            className="relative flex h-5 w-5 cursor-pointer items-center justify-center overflow-hidden rounded-full border border-black/15 shadow-2xs"
+            style={{
+              background: "conic-gradient(#ef4444,#eab308,#22c55e,#0ea5e9,#8b5cf6,#ef4444)",
+            }}
           >
             <input
               type="color"
@@ -263,107 +372,84 @@ export function DrawingToolbar({
             />
           </label>
         </div>
+      </aside>
 
-        {/* Sliders: Brush Size, Stroke Opacity, Board Opacity */}
-        <div className="flex flex-wrap items-center gap-4 text-xs text-slate-600">
-          <label className="flex items-center gap-2">
-            <span className="font-medium text-slate-700">Size</span>
-            <input
-              type="range"
-              min={2}
-              max={48}
-              step={1}
-              value={brushWidth}
-              onChange={(e) => setBrushWidth(Number(e.target.value))}
-              className="w-20 accent-sky-600"
-            />
-            <span className="w-8 font-mono text-[11px] font-semibold text-slate-800">
-              {brushWidth}px
-            </span>
-          </label>
-
-          <label className="flex items-center gap-2">
-            <span className="font-medium text-slate-700">Ink</span>
-            <input
-              type="range"
-              min={10}
-              max={100}
-              step={5}
-              value={Math.round(strokeOpacity * 100)}
-              onChange={(e) => setStrokeOpacity(Number(e.target.value) / 100)}
-              className="w-20 accent-sky-600"
-            />
-            <span className="w-9 font-mono text-[11px] font-semibold text-slate-800">
-              {Math.round(strokeOpacity * 100)}%
-            </span>
-          </label>
-
-          <label className="flex items-center gap-2">
-            <span className="font-medium text-sky-700">Board Opacity</span>
-            <input
-              type="range"
-              min={0}
-              max={100}
-              step={5}
-              value={Math.round(boardOpacity * 100)}
-              onChange={(e) => setBoardOpacity(Number(e.target.value) / 100)}
-              className="w-24 accent-sky-600"
-            />
-            <span className="w-9 font-mono text-[11px] font-semibold text-sky-700">
-              {Math.round(boardOpacity * 100)}%
-            </span>
-          </label>
-        </div>
-
-        {/* Background Grid + View Mode + Dwell */}
-        <div className="flex flex-wrap items-center gap-1.5">
-          <div className="flex items-center gap-0.5 rounded-lg border border-slate-200 bg-slate-100 p-0.5 text-[11px]">
-            <Grid3x3 className="mx-1 h-3.5 w-3.5 text-slate-500" />
-            {PATTERNS.map((p) => (
-              <button
-                key={p.id}
-                onClick={() => setBackgroundPattern(p.id)}
-                className={`rounded-md px-1.5 py-0.5 font-medium transition ${
-                  backgroundPattern === p.id
-                    ? "bg-white text-slate-900 shadow-2xs"
-                    : "text-slate-600 hover:text-slate-900"
-                }`}
-              >
-                {p.label}
-              </button>
-            ))}
+      {/* 3. COLLAPSIBLE BRUSH POPOVER */}
+      {showBrushPopover && (
+        <div className="pointer-events-auto absolute left-16 top-36 z-40 w-56 rounded-2xl border border-[var(--border-hairline)] bg-[var(--bg-surface)] p-3.5 shadow-xl backdrop-blur-md">
+          <div className="mb-3 flex items-center justify-between text-xs font-semibold text-[var(--text-primary)]">
+            <span>Stroke & Board Settings</span>
+            <button
+              onClick={() => setShowBrushPopover(false)}
+              className="text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
           </div>
 
-          <div className="flex items-center gap-0.5 rounded-lg border border-slate-200 bg-slate-100 p-0.5 text-[11px]">
-            <Eye className="mx-1 h-3.5 w-3.5 text-slate-500" />
-            {CAMERA_MODES.map((m) => (
-              <button
-                key={m.id}
-                onClick={() => setCameraMode(m.id)}
-                className={`rounded-md px-2 py-0.5 font-medium transition ${
-                  cameraMode === m.id
-                    ? "bg-white text-slate-900 shadow-2xs"
-                    : "text-slate-600 hover:text-slate-900"
-                }`}
-              >
-                {m.label}
-              </button>
-            ))}
-          </div>
+          <div className="space-y-3 text-xs">
+            {/* Brush Size */}
+            <div className="space-y-1">
+              <div className="flex justify-between text-[11px]">
+                <span className="font-medium text-[var(--text-secondary)]">Brush Size</span>
+                <span className="font-mono font-semibold tabular-nums text-[var(--text-primary)]">
+                  {brushWidth}px
+                </span>
+              </div>
+              <input
+                type="range"
+                min={2}
+                max={48}
+                step={1}
+                value={brushWidth}
+                onChange={(e) => setBrushWidth(Number(e.target.value))}
+                className="w-full accent-[var(--accent-primary)]"
+              />
+            </div>
 
-          <button
-            onClick={() => setDwellToolbar(!dwellToolbar)}
-            className={`rounded-lg border px-2 py-1 text-[11px] font-medium transition ${
-              dwellToolbar
-                ? "border-sky-200 bg-sky-50 text-sky-700"
-                : "border-slate-200 bg-slate-100 text-slate-500"
-            }`}
-            title="Trigger toolbar buttons by hovering 2 fingers (Peace) over them"
-          >
-            Dwell {dwellToolbar ? "ON" : "OFF"}
-          </button>
+            {/* Ink Opacity */}
+            <div className="space-y-1">
+              <div className="flex justify-between text-[11px]">
+                <span className="font-medium text-[var(--text-secondary)]">Ink Opacity</span>
+                <span className="font-mono font-semibold tabular-nums text-[var(--text-primary)]">
+                  {Math.round(strokeOpacity * 100)}%
+                </span>
+              </div>
+              <input
+                type="range"
+                min={10}
+                max={100}
+                step={5}
+                value={Math.round(strokeOpacity * 100)}
+                onChange={(e) => setStrokeOpacity(Number(e.target.value) / 100)}
+                className="w-full accent-[var(--accent-primary)]"
+              />
+            </div>
+
+            {/* Board Opacity */}
+            <div className="space-y-1 border-t border-[var(--border-hairline)] pt-2">
+              <div className="flex justify-between text-[11px]">
+                <span className="font-medium text-[var(--accent-primary)]">Board Backdrop</span>
+                <span className="font-mono font-semibold tabular-nums text-[var(--accent-primary)]">
+                  {Math.round(boardOpacity * 100)}%
+                </span>
+              </div>
+              <input
+                type="range"
+                min={0}
+                max={100}
+                step={5}
+                value={Math.round(boardOpacity * 100)}
+                onChange={(e) => setBoardOpacity(Number(e.target.value) / 100)}
+                className="w-full accent-[var(--accent-primary)]"
+              />
+              <p className="text-[10px] text-[var(--text-secondary)]">
+                Higher values make the drawing surface more opaque over your video feed.
+              </p>
+            </div>
+          </div>
         </div>
-      </div>
-    </div>
+      )}
+    </>
   );
 }

@@ -16,6 +16,7 @@ import {
   type ScoreboardSummaryDto,
   type StrokeDto,
   type SystemTelemetryDto,
+  type GpuInfoDto,
 } from "./types";
 
 function mapCalibration(raw: CalibrationProfile_Serialize): CalibrationProfile {
@@ -145,8 +146,24 @@ export class TauriAdapter implements PlatformAdapter {
     };
   }
 
+  async getGpuInfo(): Promise<GpuInfoDto> {
+    return await commands.getGpuInfo();
+  }
+
+  async setGpuPreference(pref: string): Promise<boolean> {
+    return await commands.setGpuPreference(pref);
+  }
+
+  async restartApplication(): Promise<void> {
+    await commands.restartApplication();
+  }
+
   async openCameraPrivacySettings(): Promise<void> {
     await commands.openCameraPrivacySettings();
+  }
+
+  async openGraphicsSettings(): Promise<void> {
+    await commands.openGraphicsSettings();
   }
 
   async resetWebviewCameraPermissions(): Promise<boolean> {

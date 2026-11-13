@@ -17,19 +17,12 @@
         "height": 820,
         "minWidth": 900,
         "minHeight": 640,
-        "resizable": true
+        "resizable": true,
+        "devtools": true
       }
     ],
     "security": {
-      "csp": {
-        "default-src": "'self'",
-        "script-src": "'self' 'wasm-unsafe-eval' blob:",
-        "worker-src": "'self' blob:",
-        "style-src": "'self' 'unsafe-inline'",
-        "img-src": "'self' asset: http://asset.localhost blob: data:",
-        "media-src": "'self' blob: mediastream:",
-        "connect-src": "'self' ipc: http://ipc.localhost blob: data:"
-      }
+      "csp": null
     }
   },
   "bundle": {

@@ -142,13 +142,13 @@ impl Default for CalibrationProfile {
             name: "Default".to_string(),
             finger_curl_threshold_deg: 72.0,
             thumb_spread_ratio: 1.18,
-            stability_frames: 4,
-            one_euro_min_cutoff: 1.4,
-            one_euro_beta: 0.05,
+            stability_frames: 3,
+            one_euro_min_cutoff: 4.5,
+            one_euro_beta: 0.5,
             one_euro_d_cutoff: 1.0,
             preferred_camera_id: None,
             mirror_feed: true,
-            fps_cap: 30,
+            fps_cap: 60,
             delegate: "GPU".to_string(),
         }
     }

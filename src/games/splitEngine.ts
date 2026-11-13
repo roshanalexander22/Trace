@@ -21,10 +21,10 @@ export function createInitialSplitState(): SplitState {
 }
 
 export function canSplitHands(hands: [number, number]): boolean {
-  return (
-    (hands[0] === 0 && (hands[1] === 2 || hands[1] === 4)) ||
-    (hands[1] === 0 && (hands[0] === 2 || hands[0] === 4))
-  );
+  if (hands[0] === 0 && (hands[1] === 2 || hands[1] === 4)) return true;
+  if (hands[1] === 0 && (hands[0] === 2 || hands[0] === 4)) return true;
+  if ((hands[0] === 3 && hands[1] === 1) || (hands[0] === 1 && hands[1] === 3)) return true;
+  return false;
 }
 
 export function getLegalSplitActions(state: SplitState): SplitAction[] {
@@ -73,11 +73,12 @@ export function applySplitAction(state: SplitState, action: SplitAction): SplitS
     opp[action.to] = sum === 5 ? 0 : sum > 5 ? sum - 5 : sum;
   } else {
     if (!canSplitHands(mine)) {
-      throw new Error("Can only split when one hand is 0 and the active hand is 2 or 4");
+      throw new Error("Cannot split hands in current state");
     }
-    const half = (mine[0] + mine[1]) / 2;
+    const sum = mine[0] + mine[1];
+    const half = Math.floor(sum / 2);
     mine[0] = half;
-    mine[1] = half;
+    mine[1] = sum - half;
   }
 
   if (next.ai[0] === 0 && next.ai[1] === 0) {

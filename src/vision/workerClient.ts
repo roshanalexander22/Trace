@@ -3,7 +3,8 @@ import { visionBus, type DetectedHandSummary } from "./visionBus";
 
 interface WorkerOutMessage {
   type: "READY" | "FRAME_RESULT" | "ERROR";
-  activeDelegate?: "GPU" | "CPU";
+  activeDelegate?: string;
+  rendererName?: string;
   frame?: ProcessedHandFrame;
   hands?: DetectedHandSummary[];
   inferenceMs?: number;
@@ -24,13 +25,13 @@ export class VisionWorkerClient {
   private fpsSamples: number[] = [];
   private currentFps = 0;
   private fpsCap = 30;
-  private onReadyCallback?: (delegate: "GPU" | "CPU") => void;
+  private onReadyCallback?: (delegate: string) => void;
   private onErrorCallback?: (msg: string) => void;
 
   start(
     calibration: CalibrationProfile,
     callbacks?: {
-      onReady?: (delegate: "GPU" | "CPU") => void;
+      onReady?: (delegate: string) => void;
       onError?: (msg: string) => void;
     },
   ) {
@@ -68,6 +69,7 @@ export class VisionWorkerClient {
             fps: this.currentFps,
             inferenceMs: msg.inferenceMs ?? 0,
             activeDelegate: msg.activeDelegate ?? "GPU",
+            rendererName: msg.rendererName,
             videoWidth: msg.videoWidth ?? 0,
             videoHeight: msg.videoHeight ?? 0,
           },
@@ -86,8 +88,9 @@ export class VisionWorkerClient {
   attachVideo(videoRef: { current: HTMLVideoElement | null }) {
     this.detachVideo();
 
-    const loop = () => {
-      this.rafId = requestAnimationFrame(loop);
+    const processLoop = () => {
+      this.rafId = requestAnimationFrame(processLoop);
+
       const video = videoRef.current;
       if (!video || !this.worker || !this.isReady || this.isBusy) return;
       if (video.readyState < 2 || video.paused || video.ended) return;
@@ -97,11 +100,24 @@ export class VisionWorkerClient {
       if (vw <= 0 || vh <= 0) return;
 
       const now = performance.now();
-      const minIntervalMs = 1000 / Math.max(10, this.fpsCap);
-      if (now - this.lastSubmittedMs < minIntervalMs) return;
+      const targetIntervalMs = 1000 / Math.max(10, this.fpsCap);
+      // 3ms tolerance for display vsync tick jitter (e.g. 16.6ms vsync tick)
+      if (now - this.lastSubmittedMs < targetIntervalMs - 3) return;
 
-      if (!this.offscreen || this.offscreen.width !== vw || this.offscreen.height !== vh) {
-        this.offscreen = new OffscreenCanvas(vw, vh);
+      // Downsample input frame to max 480px dimension to eliminate GPU texture bandwidth bottlenecks.
+      // MediaPipe HandLandmarker internally operates on a 256x256 tensor; normalized landmarks [0..1]
+      // are completely resolution-invariant.
+      const maxDim = 480;
+      const scale = Math.min(1, maxDim / Math.max(vw, vh));
+      const targetW = Math.max(1, Math.round(vw * scale));
+      const targetH = Math.max(1, Math.round(vh * scale));
+
+      if (
+        !this.offscreen ||
+        this.offscreen.width !== targetW ||
+        this.offscreen.height !== targetH
+      ) {
+        this.offscreen = new OffscreenCanvas(targetW, targetH);
         this.offscreenCtx = this.offscreen.getContext("2d", {
           alpha: false,
           desynchronized: true,
@@ -110,15 +126,17 @@ export class VisionWorkerClient {
 
       if (!this.offscreenCtx) return;
 
-      this.offscreenCtx.drawImage(video, 0, 0, vw, vh);
+      this.offscreenCtx.drawImage(video, 0, 0, targetW, targetH);
       const bitmap = this.offscreen.transferToImageBitmap();
-      this.lastSubmittedMs = now;
+      // Ensure strictly monotonically increasing timestamp for MediaPipe VIDEO runningMode
+      const timestampMs = Math.max(now, this.lastSubmittedMs + 1);
+      this.lastSubmittedMs = timestampMs;
       this.isBusy = true;
       this.worker.postMessage(
         {
           type: "DETECT_FRAME",
           bitmap,
-          timestampMs: now,
+          timestampMs,
           videoWidth: vw,
           videoHeight: vh,
         },
@@ -126,7 +144,7 @@ export class VisionWorkerClient {
       );
     };
 
-    this.rafId = requestAnimationFrame(loop);
+    this.rafId = requestAnimationFrame(processLoop);
   }
 
   detachVideo() {
@@ -151,4 +169,3 @@ export class VisionWorkerClient {
 }
 
 export const workerClient = new VisionWorkerClient();
-

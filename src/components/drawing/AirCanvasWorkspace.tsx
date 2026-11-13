@@ -393,7 +393,7 @@ export function AirCanvasWorkspace({
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onPointerCancel={handlePointerUp}
-      className="relative flex-1 cursor-crosshair select-none overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg touch-none"
+      className="relative flex-1 cursor-crosshair select-none overflow-hidden rounded-xl bg-[var(--bg-surface)] touch-none"
     >
       {/* Layer 1: Camera Feed */}
       <div
@@ -432,17 +432,17 @@ export function AirCanvasWorkspace({
       <GestureCursor containerRef={containerRef} onDwellTrigger={handleDwellTrigger} />
 
       {/* Bottom Gesture Guide Pill */}
-      <div className="pointer-events-none absolute bottom-3 left-3 z-20 flex flex-wrap gap-2 rounded-xl border border-slate-200/90 bg-white/90 px-3 py-1.5 text-[11px] text-slate-600 shadow-md backdrop-blur">
+      <div className="pointer-events-none absolute bottom-3 left-3 z-20 flex flex-wrap items-center gap-2 rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-surface)]/90 px-3 py-1.5 text-[11px] text-[var(--text-secondary)] shadow-xs backdrop-blur-md">
         <span>
-          <strong className="text-sky-700">☝️ Index</strong> or <strong>Mouse</strong> Draw
+          <strong className="text-[var(--text-primary)]">☝️ Index</strong> or <strong>Mouse</strong> Draw
         </span>
-        <span>•</span>
+        <span className="opacity-40">•</span>
         <span>
-          <strong className="text-indigo-700">✌️ Peace</strong> Hover / Pick Tool
+          <strong className="text-[var(--accent-primary)]">✌️ Peace</strong> Hover / Pick Tool
         </span>
-        <span>•</span>
+        <span className="opacity-40">•</span>
         <span>
-          <strong className="text-emerald-700">✋ Palm</strong> Stop
+          <strong className="text-[var(--status-ready)]">✋ Palm</strong> Stop
         </span>
       </div>
     </div>

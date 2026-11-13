@@ -6,7 +6,6 @@ import type { ArtworkMetaDto } from "../platform/types";
 import { useAppStore } from "../store/useAppStore";
 import { useDrawingStore } from "../store/useDrawingStore";
 import { CameraPermissionGuard } from "../components/layout/CameraPermissionGuard";
-import { CameraSelector } from "../components/vision/CameraSelector";
 import { AirCanvasWorkspace } from "../components/drawing/AirCanvasWorkspace";
 import { DrawingToolbar } from "../components/drawing/DrawingToolbar";
 
@@ -112,48 +111,34 @@ export function AirCanvasPage({ camera, videoRef }: AirCanvasPageProps) {
   };
 
   return (
-    <div className="mx-auto flex h-full w-full max-w-7xl flex-col gap-3 p-3 md:p-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <input
-            type="text"
-            value={artworkTitle}
-            onChange={(e) => setArtworkTitle(e.target.value)}
-            aria-label="Artwork Title"
-            className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold text-slate-900 shadow-2xs outline-none focus:border-sky-500"
-          />
-          {statusToast && (
-            <span className="rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">
-              {statusToast}
-            </span>
-          )}
-        </div>
-        <CameraSelector camera={camera} compact />
-      </div>
-
-      <DrawingToolbar
-        artworks={artworks}
-        onRefreshArtworks={refreshArtworks}
-        onOpenArtwork={(id) => void handleOpenArtwork(id)}
-        onSaveProject={() => void handleSaveProject()}
-        onExportPng={() => void handleExportPng()}
-        onExportSvg={() => void handleExportSvg()}
-      />
-
+    <div className="relative flex h-full w-full flex-col overflow-hidden bg-[var(--bg-canvas)] p-2">
       {camera.error ? (
-        <div className="flex-1 rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex-1 rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-surface)] shadow-xs">
           <CameraPermissionGuard
             error={camera.error}
             onRetry={() => void camera.startCamera(camera.activeDeviceId)}
           />
         </div>
       ) : (
-        <AirCanvasWorkspace
-          videoRef={videoRef}
-          stream={camera.stream}
-          committedCanvasRef={committedCanvasRef}
-          onDwellAction={() => audio.playClick()}
-        />
+        <div className="relative flex flex-1 h-full w-full overflow-hidden rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-surface)] shadow-xs">
+          <AirCanvasWorkspace
+            videoRef={videoRef}
+            stream={camera.stream}
+            committedCanvasRef={committedCanvasRef}
+            onDwellAction={() => audio.playClick()}
+          />
+          <DrawingToolbar
+            artworkTitle={artworkTitle}
+            setArtworkTitle={setArtworkTitle}
+            statusToast={statusToast}
+            artworks={artworks}
+            onRefreshArtworks={refreshArtworks}
+            onOpenArtwork={(id) => void handleOpenArtwork(id)}
+            onSaveProject={() => void handleSaveProject()}
+            onExportPng={() => void handleExportPng()}
+            onExportSvg={() => void handleExportSvg()}
+          />
+        </div>
       )}
     </div>
   );

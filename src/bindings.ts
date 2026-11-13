@@ -16,7 +16,11 @@ export const commands = {
 	exportArtworkSvg: (title: string, width: number, height: number, strokes: StrokeDto[]) => __TAURI_INVOKE<string | null>("export_artwork_svg", { title, width, height, strokes }),
 	exportArtworkPng: (title: string, pngBytes: number[]) => __TAURI_INVOKE<string | null>("export_artwork_png", { title, pngBytes }),
 	getSystemTelemetry: () => __TAURI_INVOKE<SystemTelemetryDto>("get_system_telemetry"),
+	getGpuInfo: () => __TAURI_INVOKE<GpuInfoDto>("get_gpu_info"),
+	setGpuPreference: (preference: string) => __TAURI_INVOKE<boolean>("set_gpu_preference", { preference }),
+	restartApplication: () => __TAURI_INVOKE<null>("restart_application"),
 	openCameraPrivacySettings: () => __TAURI_INVOKE<null>("open_camera_privacy_settings"),
+	openGraphicsSettings: () => __TAURI_INVOKE<null>("open_graphics_settings"),
 	resetWebviewCameraPermissions: () => __TAURI_INVOKE<boolean>("reset_webview_camera_permissions"),
 };
 
@@ -37,6 +41,11 @@ export type ArtworkMetaDto = {
 	height: number,
 	stroke_count: number,
 	updated_at: number | null,
+};
+
+export type GpuInfoDto = {
+	active_preference: string,
+	detected_gpus: string[],
 };
 
 export type CalibrationProfile = CalibrationProfile_Serialize | CalibrationProfile_Deserialize;

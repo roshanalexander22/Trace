@@ -8,11 +8,13 @@ import {
 } from "../platform/types";
 
 export type AppMode = "home" | "rps" | "split" | "cricket" | "canvas" | "settings";
+export type AppTheme = "light" | "dark";
 
 export interface LiveTelemetry {
   fps: number;
   inferenceMs: number;
-  activeDelegate: "GPU" | "CPU";
+  activeDelegate: string;
+  rendererName?: string;
   detected: boolean;
   stableGesture: GestureKind;
   drawingState: DrawingState;
@@ -24,6 +26,8 @@ export interface LiveTelemetry {
 
 interface AppStoreState {
   mode: AppMode;
+  theme: AppTheme;
+  navCollapsed: boolean;
   cameraEnabled: boolean;
   trackingEnabled: boolean;
   soundEnabled: boolean;
@@ -34,12 +38,16 @@ interface AppStoreState {
   systemTelemetry: SystemTelemetryDto;
 
   setMode: (mode: AppMode) => void;
+  setTheme: (theme: AppTheme) => void;
+  toggleTheme: () => void;
+  setNavCollapsed: (collapsed: boolean) => void;
+  toggleNav: () => void;
   setCameraEnabled: (enabled: boolean) => void;
   toggleCamera: () => void;
   setTrackingEnabled: (enabled: boolean) => void;
   toggleTracking: () => void;
   setSoundEnabled: (enabled: boolean) => void;
-  setVisionReady: (ready: boolean, delegate?: "GPU" | "CPU") => void;
+  setVisionReady: (ready: boolean, delegate?: string) => void;
   setVisionError: (err: string | null) => void;
   setCalibration: (cal: CalibrationProfile) => void;
   patchCalibration: (patch: Partial<CalibrationProfile>) => void;
@@ -47,8 +55,18 @@ interface AppStoreState {
   setSystemTelemetry: (sys: SystemTelemetryDto) => void;
 }
 
+const getStoredTheme = (): AppTheme => {
+  try {
+    const saved = localStorage.getItem("trace_theme");
+    if (saved === "light" || saved === "dark") return saved;
+  } catch {}
+  return "light";
+};
+
 export const useAppStore = create<AppStoreState>((set) => ({
   mode: "home",
+  theme: getStoredTheme(),
+  navCollapsed: false,
   cameraEnabled: true,
   trackingEnabled: true,
   soundEnabled: true,
@@ -73,6 +91,24 @@ export const useAppStore = create<AppStoreState>((set) => ({
   },
 
   setMode: (mode) => set({ mode }),
+  setTheme: (theme) => {
+    try {
+      localStorage.setItem("trace_theme", theme);
+    } catch {}
+    document.documentElement.setAttribute("data-theme", theme);
+    set({ theme });
+  },
+  toggleTheme: () =>
+    set((s) => {
+      const next: AppTheme = s.theme === "light" ? "dark" : "light";
+      try {
+        localStorage.setItem("trace_theme", next);
+      } catch {}
+      document.documentElement.setAttribute("data-theme", next);
+      return { theme: next };
+    }),
+  setNavCollapsed: (navCollapsed) => set({ navCollapsed }),
+  toggleNav: () => set((s) => ({ navCollapsed: !s.navCollapsed })),
   setCameraEnabled: (cameraEnabled) => set({ cameraEnabled }),
   toggleCamera: () => set((s) => ({ cameraEnabled: !s.cameraEnabled })),
   setTrackingEnabled: (trackingEnabled) => set({ trackingEnabled }),

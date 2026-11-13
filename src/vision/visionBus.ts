@@ -4,7 +4,8 @@ import type { HandSlot } from "./handTrackerAssigner";
 export interface VisionMetrics {
   fps: number;
   inferenceMs: number;
-  activeDelegate: "GPU" | "CPU";
+  activeDelegate: string;
+  rendererName?: string;
   videoWidth: number;
   videoHeight: number;
 }

@@ -1,9 +1,8 @@
 import { AnimatePresence, motion } from "framer-motion";
-import { BookOpen, RotateCcw, Sparkles, Split as SplitIcon, Trophy, X } from "lucide-react";
+import { BookOpen, RotateCcw, Split as SplitIcon, Trophy, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { HandAnimation } from "../components/rps/HandAnimation";
 import { CameraPreview } from "../components/vision/CameraPreview";
-import { CameraSelector } from "../components/vision/CameraSelector";
 import { HandSkeletonOverlay } from "../components/vision/HandSkeletonOverlay";
 import {
   applySplitAction,
@@ -40,8 +39,8 @@ interface AiLungeState {
   targetPlayerIdx?: 0 | 1;
 }
 
-const CONTACT_DWELL_MS = 180;
-const SPLIT_TOUCH_DWELL_MS = 200;
+const CONTACT_DWELL_MS = 160;
+const SPLIT_TOUCH_DWELL_MS = 150;
 
 export function SplitArenaPage({ camera, videoRef }: SplitArenaPageProps) {
   const mirror = useAppStore((s) => s.calibration.mirror_feed);
@@ -276,7 +275,7 @@ export function SplitArenaPage({ camera, videoRef }: SplitArenaPageProps) {
       const occludedMidJoin =
         !handsJoined &&
         splitHoverSinceRef.current !== null &&
-        now - lastSplitTouchMsRef.current <= 240 &&
+        now - lastSplitTouchMsRef.current <= 400 &&
         hands.length >= 1;
 
       if (handsJoined) {
@@ -529,115 +528,18 @@ export function SplitArenaPage({ camera, videoRef }: SplitArenaPageProps) {
   const playerCanSplit = game.turn === "Player" && !game.winner && canSplitHands(game.player);
 
   return (
-    <div className="mx-auto flex h-full w-full max-w-[1440px] flex-col gap-3 p-3 sm:p-4">
-      {/* Compact Top Control Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-2.5 rounded-2xl border border-slate-200/90 bg-white/90 px-4 py-2.5 shadow-xs backdrop-blur-md">
-        <div className="flex items-center gap-3">
-          <div>
-            <h2 className="flex items-center gap-2 text-base font-bold text-slate-900 sm:text-lg">
-              <Sparkles className="h-4.5 w-4.5 text-sky-600" />
-              Split (Chopsticks)
-            </h2>
-            <p className="hidden text-[11px] text-slate-500 sm:block">
-              Match your finger count on camera and reach up to physically tap either AI hand.
-            </p>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-bold">
-            <Trophy className="h-3.5 w-3.5 text-amber-500" />
-            <span className="text-emerald-700">You {scores.player}</span>
-            <span className="text-slate-400">—</span>
-            <span className="text-rose-700">{scores.ai} AI</span>
-          </div>
-
-          <span
-            className={`rounded-xl border px-2.5 py-1.5 text-xs font-bold ${
-              game.winner
-                ? "border-amber-200 bg-amber-50 text-amber-800"
-                : game.turn === "Player"
-                  ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                  : "border-rose-200 bg-rose-50 text-rose-700"
-            }`}
-          >
-            {game.winner
-              ? game.winner === "Player"
-                ? "You Won!"
-                : "AI Won!"
-              : game.turn === "Player"
-                ? "Your Turn"
-                : "AI Turn"}
-          </span>
-
-          <CameraSelector camera={camera} compact />
-
-          <button
-            type="button"
-            onClick={() => setShowRules((v) => !v)}
-            className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
-          >
-            <BookOpen className="h-3.5 w-3.5 text-sky-600" />
-            Rules
-          </button>
-
-          <button
-            type="button"
-            onClick={() => resetMatch(false)}
-            className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
-          >
-            <RotateCcw className="h-3.5 w-3.5" />
-            Restart
-          </button>
-        </div>
-      </div>
-
-      {/* Collapsible Rules Drawer */}
-      <AnimatePresence>
-        {showRules && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-            className="overflow-hidden rounded-2xl border border-sky-200 bg-white/95 px-4 py-3 text-xs text-slate-700 shadow-xs"
-          >
-            <div className="flex items-start justify-between gap-4">
-              <div className="grid gap-1 sm:grid-cols-2 sm:gap-x-6">
-                <p>
-                  <strong className="text-slate-900">1. Tap to Add:</strong> Show the exact finger count
-                  on either active hand in camera, then reach upward until your hand touches an AI hand.
-                </p>
-                <p>
-                  <strong className="text-slate-900">2. Exact 5 & Rollover:</strong> Hitting{" "}
-                  <strong>5</strong> puts that hand <strong>OUT (0)</strong>. Above 5 rolls over (6→1,
-                  7→2, 8→3).
-                </p>
-                <p>
-                  <strong className="text-slate-900">3. Split (Revive):</strong> When one hand is{" "}
-                  <strong>0</strong> and the other is <strong>2 or 4</strong>, bring both hands together
-                  in the middle (or click Split) to divide equally (2-0 → 1-1, 4-0 → 2-2).
-                </p>
-                <p>
-                  <strong className="text-slate-900">4. Two-Hand Wave Reset:</strong> Raise{" "}
-                  <strong>both hands</strong> and wave them side-to-side to restart the match anytime.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowRules(false)}
-                className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Main Full-Screen Interactive Camera Arena */}
+    <div
+      className="relative flex h-full w-full flex-col select-none overflow-hidden"
+      style={{
+        backgroundColor: "var(--bg-canvas)",
+        color: "var(--text-primary)",
+      }}
+    >
+      {/* Full-Bleed Interactive Camera Arena */}
       <div
         ref={arenaRef}
-        className="relative flex-1 overflow-hidden rounded-3xl border border-slate-200 bg-slate-900 shadow-lg"
+        className="relative flex-1 w-full h-full overflow-hidden"
+        style={{ backgroundColor: "var(--bg-well)" }}
       >
         {/* Fullscreen Webcam Layer */}
         <div className="absolute inset-0">
@@ -645,8 +547,133 @@ export function SplitArenaPage({ camera, videoRef }: SplitArenaPageProps) {
         </div>
 
         {/* Subtle Top & Bottom Gradient Scrims for Crisp HUD Readability */}
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-44 bg-gradient-to-b from-white/80 via-white/35 to-transparent" />
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-slate-950/55 via-slate-950/20 to-transparent" />
+        <div
+          className="pointer-events-none absolute inset-x-0 top-0 h-36 bg-gradient-to-b from-black/45 via-black/15 to-transparent"
+        />
+        <div
+          className="pointer-events-none absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-black/55 via-black/20 to-transparent"
+        />
+
+        {/* Floating Top Bar Inside Stage: Score Pill Centered, Rules + Restart Pinned Top-Right */}
+        <div className="absolute inset-x-4 top-3 z-20 flex items-center justify-between pointer-events-none">
+          {/* Left Title Pill */}
+          <div
+            className="pointer-events-auto inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border backdrop-blur-md text-xs font-semibold"
+            style={{
+              backgroundColor: "var(--bg-surface)",
+              borderColor: "var(--border-hairline)",
+            }}
+          >
+            <SplitIcon className="w-3.5 h-3.5" strokeWidth={1.5} style={{ color: "var(--accent-primary)" }} />
+            <span>Split</span>
+          </div>
+
+          {/* Centered Translucent Score Pill */}
+          <div
+            className="pointer-events-auto inline-flex items-center gap-2.5 px-3.5 py-1.5 rounded-full border backdrop-blur-md text-xs font-bold shadow-sm"
+            style={{
+              backgroundColor: "var(--bg-surface)",
+              borderColor: "var(--border-hairline)",
+            }}
+          >
+            <Trophy className="w-3.5 h-3.5 text-amber-500" strokeWidth={1.5} />
+            <span className="telemetry-value" style={{ color: "var(--status-ready)" }}>You {scores.player}</span>
+            <span style={{ color: "var(--text-secondary)", opacity: 0.6 }}>—</span>
+            <span className="telemetry-value" style={{ color: "var(--accent-primary)" }}>{scores.ai} AI</span>
+            <span style={{ color: "var(--text-secondary)", opacity: 0.6 }}>·</span>
+            <span
+              className="text-[11px] font-semibold"
+              style={{
+                color: game.winner
+                  ? "var(--text-primary)"
+                  : game.turn === "Player"
+                    ? "var(--status-ready)"
+                    : "var(--accent-primary)",
+              }}
+            >
+              {game.winner
+                ? game.winner === "Player"
+                  ? "You Won!"
+                  : "AI Won!"
+                : game.turn === "Player"
+                  ? "Your Turn"
+                  : "AI Turn"}
+            </span>
+          </div>
+
+          {/* Right Pinned Rules & Restart Buttons */}
+          <div className="pointer-events-auto flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setShowRules((v) => !v)}
+              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border text-xs font-medium backdrop-blur-md interactive-control"
+              style={{
+                backgroundColor: "var(--bg-surface)",
+                borderColor: "var(--border-hairline)",
+                color: "var(--text-secondary)",
+              }}
+            >
+              <BookOpen className="w-3.5 h-3.5" strokeWidth={1.5} />
+              <span>Rules</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => resetMatch(false)}
+              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border text-xs font-medium backdrop-blur-md interactive-control"
+              style={{
+                backgroundColor: "var(--bg-surface)",
+                borderColor: "var(--border-hairline)",
+                color: "var(--text-secondary)",
+              }}
+            >
+              <RotateCcw className="w-3.5 h-3.5" strokeWidth={1.5} />
+              <span>Restart</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Non-Blocking Slide-Over Rules Drawer */}
+        <AnimatePresence>
+          {showRules && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="absolute top-14 right-4 z-30 max-w-md p-4 rounded-2xl border text-xs shadow-xl backdrop-blur-md"
+              style={{
+                backgroundColor: "var(--bg-surface)",
+                borderColor: "var(--border-hairline)",
+                color: "var(--text-primary)",
+              }}
+            >
+              <div className="flex items-center justify-between pb-2 mb-2 border-b" style={{ borderColor: "var(--border-hairline)" }}>
+                <span className="font-bold text-xs">Official Split (Chopsticks) Rules</span>
+                <button
+                  type="button"
+                  onClick={() => setShowRules(false)}
+                  className="p-1 rounded text-slate-400 hover:text-slate-600"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+              <div className="space-y-1.5 leading-relaxed text-[11px]" style={{ color: "var(--text-secondary)" }}>
+                <p>
+                  <strong style={{ color: "var(--text-primary)" }}>1. Tap to Add:</strong> Show the exact finger count on either hand, then reach up to tap an AI hand.
+                </p>
+                <p>
+                  <strong style={{ color: "var(--text-primary)" }}>2. Exact 5 & Rollover:</strong> Reaching 5 is OUT (0). Over 5 rolls over (6→1, 7→2, 8→3).
+                </p>
+                <p>
+                  <strong style={{ color: "var(--text-primary)" }}>3. Split (Revive):</strong> When one hand is 0 and the other is 2 or 4, join both hands together to split evenly (2-0 → 1-1, 4-0 → 2-2).
+                </p>
+                <p>
+                  <strong style={{ color: "var(--text-primary)" }}>4. Wave to Reset:</strong> Raise both hands and wave side-to-side to restart match anytime.
+                </p>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Camera Error Guard (only when camera is intentionally enabled) */}
         {cameraEnabled && camera.error && (
@@ -663,7 +690,7 @@ export function SplitArenaPage({ camera, videoRef }: SplitArenaPageProps) {
         )}
 
         {/* TOP SECTION: Two Downward-Facing Animated AI Hands */}
-        <div className="relative z-10 flex items-start justify-around px-6 pt-3 sm:px-16 sm:pt-4">
+        <div className="absolute inset-x-0 top-14 z-20 flex items-start justify-around px-6 pointer-events-none sm:px-24">
           {([0, 1] as const).map((aiIdx) => {
             const count = game.ai[aiIdx];
             const isOut = count === 0;
@@ -686,7 +713,7 @@ export function SplitArenaPage({ camera, videoRef }: SplitArenaPageProps) {
                 animate={lunging}
                 transition={{ type: "spring", stiffness: 220, damping: 20 }}
                 onClick={() => {
-                  // Optional click fallback if player left hand or right hand active count is selected manually
+                  // Click fallback if player left hand or right hand active count is selected manually
                   if (game.turn !== "Player" || isOut || aiAnimatingRef.current) return;
                   const preferredAttacker: 0 | 1 = game.player[0] > 0 ? 0 : 1;
                   if (game.player[preferredAttacker] > 0) {
@@ -697,27 +724,38 @@ export function SplitArenaPage({ camera, videoRef }: SplitArenaPageProps) {
                     });
                   }
                 }}
-                className={`group relative flex cursor-pointer flex-col items-center rounded-3xl border px-4 py-2.5 backdrop-blur-md transition ${
+                className={`pointer-events-auto group relative flex cursor-pointer flex-col items-center rounded-3xl border px-5 py-3 shadow-xl backdrop-blur-md transition-all ${
                   isOut
-                    ? "border-slate-300/70 bg-white/60 opacity-55"
+                    ? "opacity-50"
                     : isTargetHovered
-                      ? "border-sky-500 bg-sky-50/95 ring-4 ring-sky-400/35 shadow-xl"
-                      : "border-rose-200/90 bg-white/85 shadow-md hover:border-rose-400"
+                      ? "ring-4 shadow-2xl scale-105"
+                      : "shadow-md hover:scale-102"
                 }`}
+                style={{
+                  backgroundColor: "var(--bg-surface)",
+                  borderColor: isTargetHovered
+                    ? "var(--status-ready)"
+                    : isOut
+                      ? "var(--border-hairline)"
+                      : "rgba(240, 100, 59, 0.4)",
+                }}
               >
                 {/* Upright AI Hand Label & Count Badge */}
-                <div className="mb-1 flex items-center gap-2">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600">
+                <div className="mb-1.5 flex items-center gap-2">
+                  <span
+                    className="text-xs font-bold uppercase tracking-wider"
+                    style={{ color: "var(--text-secondary)" }}
+                  >
                     AI {aiIdx === 0 ? "Left" : "Right"}
                   </span>
                   <span
-                    className={`rounded-full px-2 py-0.5 text-xs font-extrabold ${
+                    className={`rounded-full px-2.5 py-0.5 text-xs font-extrabold ${
                       isOut
-                        ? "bg-slate-200 text-slate-600"
-                        : "bg-rose-600 text-white shadow-2xs"
+                        ? "bg-slate-300 text-slate-700 dark:bg-zinc-700 dark:text-zinc-300"
+                        : "bg-rose-600 text-white shadow-xs"
                     }`}
                   >
-                    {isOut ? "OUT (5)" : count}
+                    {isOut ? "OUT (5)" : `${count} Finger${count === 1 ? "" : "s"}`}
                   </span>
                 </div>
 
@@ -728,12 +766,12 @@ export function SplitArenaPage({ camera, videoRef }: SplitArenaPageProps) {
                   accent={isOut ? "amber" : isTargetHovered ? "emerald" : "rose"}
                   facing="down"
                   mirrored={aiIdx === 1}
-                  sizeClass="h-24 w-24 sm:h-32 sm:w-32"
+                  sizeClass="h-28 w-28 sm:h-36 sm:w-36"
                 />
 
                 {/* Tap Hold Progress Bar when Player's Physical Hand Enters Target */}
                 {isTargetHovered && (
-                  <div className="mt-1 h-1.5 w-24 overflow-hidden rounded-full bg-slate-200">
+                  <div className="mt-2 h-2 w-28 overflow-hidden rounded-full bg-slate-200 dark:bg-zinc-700">
                     <div
                       className="h-full bg-emerald-500 transition-all duration-75"
                       style={{ width: `${Math.round(touchProgress.pct * 100)}%` }}
@@ -757,16 +795,16 @@ export function SplitArenaPage({ camera, videoRef }: SplitArenaPageProps) {
         </div>
 
         {/* MIDDLE INTERACTION ZONE: Status Banner, Split Action Pill & Two-Hand Wave Progress */}
-        <div className="pointer-events-none relative z-10 mt-3 flex flex-col items-center gap-2 px-4 sm:mt-5">
+        <div className="pointer-events-none absolute inset-x-0 top-60 z-20 flex flex-col items-center gap-2 px-4 sm:top-72">
           <div
-            className={`max-w-xl rounded-2xl border px-4 py-2 text-center text-xs font-semibold shadow-sm backdrop-blur-md sm:text-sm ${
+            className={`max-w-xl rounded-2xl border px-4 py-2 text-center text-xs font-semibold shadow-md backdrop-blur-md sm:text-sm ${
               statusTone === "warn"
-                ? "border-amber-300 bg-amber-50/95 text-amber-900"
+                ? "border-amber-400 bg-amber-500/15 text-amber-600 dark:text-amber-300"
                 : statusTone === "good"
-                  ? "border-emerald-300 bg-emerald-50/95 text-emerald-900"
+                  ? "border-emerald-400 bg-emerald-500/15 text-emerald-600 dark:text-emerald-300"
                   : statusTone === "ai"
-                    ? "border-rose-300 bg-rose-50/95 text-rose-900"
-                    : "border-white/80 bg-white/90 text-slate-800"
+                    ? "border-rose-400 bg-rose-500/15 text-rose-600 dark:text-rose-300"
+                    : "border-slate-300 bg-white/90 text-slate-800 dark:border-zinc-700 dark:bg-zinc-900/90 dark:text-zinc-100"
             }`}
           >
             {statusMessage}
@@ -776,15 +814,16 @@ export function SplitArenaPage({ camera, videoRef }: SplitArenaPageProps) {
             <button
               type="button"
               onClick={() => commitPlayerAction({ type: "split" })}
-              className="pointer-events-auto inline-flex items-center gap-2 rounded-2xl border border-sky-400 bg-white/95 px-4 py-2 text-xs font-bold text-sky-700 shadow-lg ring-2 ring-sky-300/40 backdrop-blur-md transition hover:bg-sky-50"
+              className="pointer-events-auto inline-flex items-center gap-2 rounded-2xl border border-sky-400 bg-white/95 dark:bg-zinc-900/95 px-5 py-2.5 text-xs font-bold text-sky-700 dark:text-sky-300 shadow-xl ring-2 ring-sky-300/50 backdrop-blur-md transition hover:bg-sky-50 dark:hover:bg-zinc-800 active:scale-95"
             >
-              <SplitIcon className="h-4 w-4 text-sky-600" />
+              <SplitIcon className="h-4 w-4 text-sky-600 dark:text-sky-400" />
               <span>
                 Join Both Hands to Split ({game.player[0]} - {game.player[1]} →{" "}
-                {(game.player[0] + game.player[1]) / 2} - {(game.player[0] + game.player[1]) / 2})
+                {Math.floor((game.player[0] + game.player[1]) / 2)} -{" "}
+                {Math.ceil((game.player[0] + game.player[1]) / 2)})
               </span>
               {splitProgress > 0 && (
-                <span className="rounded-full bg-sky-600 px-2 py-0.5 text-[10px] font-extrabold text-white">
+                <span className="rounded-full bg-sky-600 px-2.5 py-0.5 text-[11px] font-extrabold text-white">
                   {Math.round(splitProgress * 100)}%
                 </span>
               )}
@@ -792,14 +831,14 @@ export function SplitArenaPage({ camera, videoRef }: SplitArenaPageProps) {
           )}
 
           {(waveProgress > 0 || resetBanner) && (
-            <div className="flex items-center gap-2 rounded-2xl border border-indigo-200 bg-white/95 px-4 py-1.5 text-xs font-bold text-indigo-700 shadow-md backdrop-blur-md">
+            <div className="flex items-center gap-2 rounded-2xl border border-indigo-300 bg-white/95 dark:bg-zinc-900/95 px-4 py-1.5 text-xs font-bold text-indigo-700 dark:text-indigo-300 shadow-md backdrop-blur-md">
               <span>
                 {resetBanner
                   ? "Match Reset!"
-                  : `Keep waving both hands to reset (${Math.round(waveProgress * 100)}%)`}
+                  : `Keep waving hands to reset (${Math.round(waveProgress * 100)}%)`}
               </span>
               {!resetBanner && (
-                <div className="h-1.5 w-20 overflow-hidden rounded-full bg-indigo-100">
+                <div className="h-2 w-24 overflow-hidden rounded-full bg-indigo-100 dark:bg-indigo-950">
                   <div
                     className="h-full bg-indigo-600 transition-all duration-75"
                     style={{ width: `${Math.round(waveProgress * 100)}%` }}

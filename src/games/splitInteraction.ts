@@ -133,26 +133,41 @@ export function areHandsTouchingForSplit(
   if (game.turn !== "Player" || game.winner || !canSplitHands(game.player)) {
     return false;
   }
-  const left = hands.find((h) => h.slot === "Left");
-  const right = hands.find((h) => h.slot === "Right");
-  if (!left || !right || left.landmarks.length < 21 || right.landmarks.length < 21) {
+  if (!hands || hands.length === 0) {
     return false;
   }
 
-  const ptsL = SPLIT_JOIN_LANDMARKS.map((idx) => {
-    const lm = left.landmarks[idx];
+  // Find two candidate hands to compare
+  let handA = hands.find((h) => h.slot === "Left");
+  let handB = hands.find((h) => h.slot === "Right");
+
+  if (!handA || !handB) {
+    if (hands.length >= 2) {
+      handA = hands[0];
+      handB = hands[1];
+    } else {
+      return false;
+    }
+  }
+
+  if (handA.landmarks.length < 21 || handB.landmarks.length < 21) {
+    return false;
+  }
+
+  const ptsA = SPLIT_JOIN_LANDMARKS.map((idx) => {
+    const lm = handA.landmarks[idx];
     return mapVideoNormToViewport(lm.x, lm.y, videoWidth, videoHeight, viewWidth, viewHeight, "cover");
   });
-  const ptsR = SPLIT_JOIN_LANDMARKS.map((idx) => {
-    const lm = right.landmarks[idx];
+  const ptsB = SPLIT_JOIN_LANDMARKS.map((idx) => {
+    const lm = handB.landmarks[idx];
     return mapVideoNormToViewport(lm.x, lm.y, videoWidth, videoHeight, viewWidth, viewHeight, "cover");
   });
 
-  const thresholdPx = Math.max(85, Math.min(viewWidth, viewHeight) * 0.16);
+  const thresholdPx = Math.max(110, Math.min(viewWidth, viewHeight) * 0.20);
   const thresholdSq = thresholdPx * thresholdPx;
 
-  for (const a of ptsL) {
-    for (const b of ptsR) {
+  for (const a of ptsA) {
+    for (const b of ptsB) {
       const dx = a.x - b.x;
       const dy = a.y - b.y;
       if (dx * dx + dy * dy <= thresholdSq) {
@@ -177,12 +192,12 @@ export interface WaveRestartUpdate {
   wavingBoth: boolean;
 }
 
-const WAVE_WINDOW_MS = 2200;
-const MIN_SWING_DX = 0.028;
+const WAVE_WINDOW_MS = 2500;
+const MIN_SWING_DX = 0.024;
 const REVERSALS_NEEDED_PER_HAND = 2;
-const MIN_SUSTAINED_MS = 420;
-const MISSING_GRACE_MS = 400;
-const COOLDOWN_MS = 2200;
+const MIN_SUSTAINED_MS = 280;
+const MISSING_GRACE_MS = 900;
+const COOLDOWN_MS = 2000;
 
 function sampleWaveX(hand: DetectedHandSummary): number {
   if (hand.landmarks.length >= 13) {
@@ -212,8 +227,22 @@ export class WaveRestartDetector {
       return { progress: 0, triggered: false, wavingBoth: false };
     }
 
-    const left = hands.find((h) => h.slot === "Left");
-    const right = hands.find((h) => h.slot === "Right");
+    let left = hands.find((h) => h.slot === "Left");
+    let right = hands.find((h) => h.slot === "Right");
+
+    // If hands are detected but slot identities swapped or both defaulted to same slot,
+    // disambiguate by screen x-coordinate so left side of screen is always Left track
+    if (!left && !right && hands.length >= 2) {
+      const sorted = [...hands].sort((a, b) => sampleWaveX(a) - sampleWaveX(b));
+      left = sorted[0];
+      right = sorted[1];
+    } else if (hands.length === 2 && left && !right) {
+      const other = hands.find((h) => h !== left);
+      if (other) right = other;
+    } else if (hands.length === 2 && right && !left) {
+      const other = hands.find((h) => h !== right);
+      if (other) left = other;
+    }
 
     if (left) {
       this.advanceTrack("Left", sampleWaveX(left), nowMs);
