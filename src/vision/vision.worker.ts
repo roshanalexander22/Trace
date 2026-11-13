@@ -27,13 +27,27 @@ let slotPipelines: Record<HandSlot, WasmVisionPipeline | null> = {
 };
 let slotMemory = createHandTrackerMemory();
 let lockedPrimarySlot: HandSlot | null = null;
-let activeDelegate: "NVIDIA" | "iGPU" | "CPU" = "NVIDIA";
+let activeDelegate: "NVIDIA" | "CPU" = "NVIDIA";
 let currentPowerPreference: "high-performance" | "low-power" = "high-performance";
 let detectedHardwareName = "";
 let wasmReady = false;
 let currentCalibration: CalibrationProfile | null = null;
+let isSwitching = false;
+let cachedVisionFileset: { wasmLoaderPath: string; wasmBinaryPath: string } | null = null;
+let cachedHighPerfRenderer = "";
+
+function resolveDelegate(raw?: string): { backend: "GPU" | "CPU"; reported: "NVIDIA" | "CPU" } {
+  const upper = (raw || "NVIDIA").toUpperCase();
+  if (upper === "CPU") {
+    return { backend: "CPU", reported: "CPU" };
+  }
+  return { backend: "GPU", reported: "NVIDIA" };
+}
 
 function queryHardwareGpu(powerPref: "high-performance" | "low-power"): string {
+  if (cachedHighPerfRenderer) {
+    return cachedHighPerfRenderer;
+  }
   try {
     const c = new OffscreenCanvas(1, 1);
     const gl =
@@ -41,11 +55,18 @@ function queryHardwareGpu(powerPref: "high-performance" | "low-power"): string {
       c.getContext("webgl", { powerPreference: powerPref });
     if (!gl) return "WebGL Unavailable";
     const dbg = (gl as any).getExtension("WEBGL_debug_renderer_info");
+    let rend = "";
     if (dbg) {
-      const rend = (gl as any).getParameter(dbg.UNMASKED_RENDERER_WEBGL);
-      if (rend) return String(rend);
+      rend = String((gl as any).getParameter(dbg.UNMASKED_RENDERER_WEBGL) || "");
     }
-    return String((gl as any).getParameter((gl as any).RENDERER) || "WebGL");
+    if (!rend) {
+      rend = String((gl as any).getParameter((gl as any).RENDERER) || "WebGL");
+    }
+    const loseContext = (gl as any).getExtension("WEBGL_lose_context");
+    loseContext?.loseContext();
+
+    cachedHighPerfRenderer = rend;
+    return rend;
   } catch {
     return "Unknown WebGL";
   }
@@ -65,6 +86,10 @@ const originalOffscreenGetContext = OffscreenCanvas.prototype.getContext;
 };
 
 async function loadLocalVisionFileset() {
+  if (cachedVisionFileset && (self as any).ModuleFactory) {
+    return cachedVisionFileset;
+  }
+
   const loaderUrl = new URL("/wasm/vision_wasm_module_internal.js", self.location.origin).href;
   const wasmBinaryUrl = new URL("/wasm/vision_wasm_module_internal.wasm", self.location.origin).href;
 
@@ -82,10 +107,11 @@ async function loadLocalVisionFileset() {
     URL.revokeObjectURL(blobUrl);
   }
 
-  return {
+  cachedVisionFileset = {
     wasmLoaderPath: "",
     wasmBinaryPath: wasmBinaryUrl,
   };
+  return cachedVisionFileset;
 }
 
 async function createLandmarker(delegate: "GPU" | "CPU"): Promise<HandLandmarker> {
@@ -121,35 +147,27 @@ async function initialize(calibration: CalibrationProfile) {
     slotPipelines.Right.update_calibration(calibration);
   }
 
-  const rawDelegate = (calibration.delegate || "NVIDIA").toUpperCase();
-  let preferredBackend: "GPU" | "CPU" = "GPU";
-  let targetReported: "NVIDIA" | "iGPU" | "CPU" = "NVIDIA";
-
-  if (rawDelegate === "CPU") {
-    preferredBackend = "CPU";
-    targetReported = "CPU";
-  } else if (rawDelegate === "IGPU") {
-    preferredBackend = "GPU";
-    targetReported = "iGPU";
-    currentPowerPreference = "low-power";
-  } else {
-    // "NVIDIA", "DGPU", "GPU"
-    preferredBackend = "GPU";
-    targetReported = "NVIDIA";
-    currentPowerPreference = "high-performance";
-  }
+  const { backend, reported } = resolveDelegate(calibration.delegate);
+  currentPowerPreference = "high-performance";
 
   detectedHardwareName =
-    preferredBackend === "CPU"
+    backend === "CPU"
       ? "CPU (WASM SIMD Multi-Core)"
-      : queryHardwareGpu(currentPowerPreference);
+      : queryHardwareGpu("high-performance");
 
   try {
-    handLandmarker?.close();
-    handLandmarker = await createLandmarker(preferredBackend);
-    activeDelegate = targetReported;
+    if (handLandmarker) {
+      try {
+        handLandmarker.close();
+      } catch (e) {
+        console.warn("Error closing previous HandLandmarker:", e);
+      }
+      handLandmarker = null;
+    }
+    handLandmarker = await createLandmarker(backend);
+    activeDelegate = reported;
   } catch (err) {
-    if (preferredBackend === "GPU") {
+    if (backend === "GPU") {
       console.warn("GPU delegate unavailable in worker, falling back to CPU:", err);
       handLandmarker = await createLandmarker("CPU");
       activeDelegate = "CPU";
@@ -158,6 +176,12 @@ async function initialize(calibration: CalibrationProfile) {
       throw err;
     }
   }
+
+  // Reset tracking state and pipelines on delegate initialization
+  slotPipelines.Left?.reset();
+  slotPipelines.Right?.reset();
+  slotMemory = createHandTrackerMemory();
+  lockedPrimarySlot = null;
 
   self.postMessage({ type: "READY", activeDelegate, rendererName: detectedHardwareName });
 }
@@ -188,17 +212,24 @@ self.onmessage = async (event: MessageEvent<WorkerInMessage>) => {
   }
 
   if (msg.type === "UPDATE_CALIBRATION") {
-    const prevDelegate = currentCalibration?.delegate;
+    const prevReported = resolveDelegate(currentCalibration?.delegate).reported;
+    const nextReported = resolveDelegate(msg.calibration.delegate).reported;
     currentCalibration = msg.calibration;
     slotPipelines.Left?.update_calibration(msg.calibration);
     slotPipelines.Right?.update_calibration(msg.calibration);
-    if (prevDelegate && prevDelegate !== msg.calibration.delegate) {
-      await initialize(msg.calibration);
+    if (prevReported !== nextReported) {
+      isSwitching = true;
+      try {
+        await initialize(msg.calibration);
+      } finally {
+        isSwitching = false;
+      }
     }
     return;
   }
 
   if (msg.type === "RESET") {
+    isSwitching = false;
     slotPipelines.Left?.reset();
     slotPipelines.Right?.reset();
     slotMemory = createHandTrackerMemory();
@@ -212,7 +243,38 @@ self.onmessage = async (event: MessageEvent<WorkerInMessage>) => {
     try {
       const leftPipe = slotPipelines.Left;
       const rightPipe = slotPipelines.Right;
-      if (!handLandmarker || !leftPipe || !rightPipe) {
+      if (isSwitching || !handLandmarker || !leftPipe || !rightPipe) {
+        // Return empty frame cleanly during delegate transitions so client isBusy flag is cleared
+        self.postMessage({
+          type: "FRAME_RESULT",
+          frame: {
+            detected: false,
+            handedness: "Unknown",
+            landmarks: [],
+            cursor: null,
+            finger_states: {
+              thumb: false,
+              index: false,
+              middle: false,
+              ring: false,
+              pinky: false,
+              scores: [0, 0, 0, 0, 0],
+            },
+            raw_gesture: "None",
+            stable_gesture: "None",
+            drawing_state: "Idle",
+            confidence: 0,
+            low_light_warning: false,
+            finger_angles_deg: [0, 0, 0, 0, 0],
+          },
+          hands: [],
+          inferenceMs: 0,
+          activeDelegate,
+          rendererName: detectedHardwareName,
+          videoWidth,
+          videoHeight,
+          timestampMs,
+        });
         return;
       }
 

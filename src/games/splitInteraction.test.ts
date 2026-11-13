@@ -3,6 +3,7 @@ import { createInitialSplitState } from "./splitEngine";
 import {
   WaveRestartDetector,
   areHandsTouchingForSplit,
+  checkPlayerReadiness,
   findTouchedAiTarget,
   validatePlayerHandCount,
 } from "./splitInteraction";
@@ -68,6 +69,72 @@ describe("splitInteraction", () => {
 
     const outHand = validatePlayerHandCount(makeSummary("Right", 0.7, 1), counts);
     expect(outHand.status).toBe("eliminated");
+  });
+
+  it("enforces that both hands are visible and counts match when both hands are alive", () => {
+    const playerCounts: [number, number] = [1, 2];
+
+    // Only 1 hand visible when both are alive -> tap is strictly BLOCKED
+    const onlyOneHand = checkPlayerReadiness(
+      [makeSummary("Left", 0.3, 1)],
+      playerCounts,
+    );
+    expect(onlyOneHand.canTap).toBe(false);
+    expect(onlyOneHand.status).toBe("need_both_hands");
+
+    // Both hands visible, but left count is wrong (saw 2 instead of 1) -> tap is BLOCKED
+    const leftMismatch = checkPlayerReadiness(
+      [makeSummary("Left", 0.25, 2), makeSummary("Right", 0.75, 2)],
+      playerCounts,
+    );
+    expect(leftMismatch.canTap).toBe(false);
+    expect(leftMismatch.status).toBe("left_mismatch");
+
+    // Both hands visible, but both counts wrong -> tap is BLOCKED
+    const bothMismatch = checkPlayerReadiness(
+      [makeSummary("Left", 0.25, 3), makeSummary("Right", 0.75, 1)],
+      playerCounts,
+    );
+    expect(bothMismatch.canTap).toBe(false);
+    expect(bothMismatch.status).toBe("both_mismatch");
+
+    // Both hands visible and both counts match -> tap is ALLOWED
+    const bothReady = checkPlayerReadiness(
+      [makeSummary("Left", 0.25, 1), makeSummary("Right", 0.75, 2)],
+      playerCounts,
+    );
+    expect(bothReady.canTap).toBe(true);
+    expect(bothReady.status).toBe("ready");
+  });
+
+  it("permits eliminated hand to be off-screen when one hand is out", () => {
+    // Left hand is 2, Right hand is 0 (eliminated)
+    const leftActiveCounts: [number, number] = [2, 0];
+
+    // Single active hand visible with 2 fingers -> tap is ALLOWED without right hand
+    const leftReady = checkPlayerReadiness(
+      [makeSummary("Left", 0.3, 2)],
+      leftActiveCounts,
+    );
+    expect(leftReady.canTap).toBe(true);
+    expect(leftReady.status).toBe("ready");
+
+    // Single active hand visible with wrong count (1 finger) -> tap is BLOCKED
+    const leftWrong = checkPlayerReadiness(
+      [makeSummary("Left", 0.3, 1)],
+      leftActiveCounts,
+    );
+    expect(leftWrong.canTap).toBe(false);
+    expect(leftWrong.status).toBe("left_mismatch");
+
+    // Right hand active (0, 3) with single right hand visible -> tap is ALLOWED
+    const rightActiveCounts: [number, number] = [0, 3];
+    const rightReady = checkPlayerReadiness(
+      [makeSummary("Right", 0.7, 3)],
+      rightActiveCounts,
+    );
+    expect(rightReady.canTap).toBe(true);
+    expect(rightReady.status).toBe("ready");
   });
 
   it("requires both hands to wave laterally multiple times before triggering restart", () => {

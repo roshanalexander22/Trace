@@ -15,10 +15,9 @@ import {
 import {
   WaveRestartDetector,
   areHandsTouchingForSplit,
+  checkPlayerReadiness,
   findTouchedAiTarget,
   getHandContactPoints,
-  validatePlayerHandCount,
-  type HandValidationResult,
   type RectBox,
 } from "../games/splitInteraction";
 import type { CameraState } from "../hooks/useCamera";
@@ -297,14 +296,39 @@ export function SplitArenaPage({ camera, videoRef }: SplitArenaPageProps) {
         setSplitProgress(0);
       }
 
-      // 3. Coordinate-accurate tap detection against rendered AI Left / AI Right hitboxes
+      // 3. Strict Player Readiness Check:
+      // Both hands must be on screen and show exact finger counts if both are alive.
+      // If one hand is OUT, it may be offscreen, but the active hand must be on screen and match.
+      const readiness = checkPlayerReadiness(hands, current.player);
+
+      if (!readiness.canTap) {
+        hoverRef.current = null;
+        setTouchProgress({ target: null, pct: 0 });
+        setStatusTone(
+          readiness.status === "need_both_hands" || readiness.status === "need_active_hand"
+            ? "info"
+            : "warn",
+        );
+        setStatusMessage(readiness.message);
+        return;
+      }
+
+      // 4. Coordinate-accurate tap detection against rendered AI Left / AI Right hitboxes
       const aiLeftBox = toRelativeRect(aiLeftBoxRef.current);
       const aiRightBox = toRelativeRect(aiRightBoxRef.current);
 
       let matchedTouch: { attacker: 0 | 1; target: 0 | 1 } | null = null;
-      let mismatchWarning: HandValidationResult | null = null;
 
-      for (const hand of hands) {
+      // Candidate attacking hands: only check hands that are active in the game
+      const candidateAttackers: Array<{ hand: DetectedHandSummary; index: 0 | 1 }> = [];
+      if (readiness.leftHand && current.player[0] > 0) {
+        candidateAttackers.push({ hand: readiness.leftHand, index: 0 });
+      }
+      if (readiness.rightHand && current.player[1] > 0) {
+        candidateAttackers.push({ hand: readiness.rightHand, index: 1 });
+      }
+
+      for (const { hand, index } of candidateAttackers) {
         const contactPts = getHandContactPoints(
           hand.landmarks,
           latestVideoSizeRef.current.w,
@@ -314,14 +338,9 @@ export function SplitArenaPage({ camera, videoRef }: SplitArenaPageProps) {
           "cover",
         );
         const touchedAi = findTouchedAiTarget(contactPts, aiLeftBox, aiRightBox, current.ai);
-        if (touchedAi === null) continue;
-
-        const validation = validatePlayerHandCount(hand, current.player);
-        if (validation.status === "matched") {
-          matchedTouch = { attacker: validation.handIndex, target: touchedAi };
+        if (touchedAi !== null) {
+          matchedTouch = { attacker: index, target: touchedAi };
           break;
-        } else {
-          mismatchWarning = validation;
         }
       }
 
@@ -355,10 +374,8 @@ export function SplitArenaPage({ camera, videoRef }: SplitArenaPageProps) {
       } else {
         hoverRef.current = null;
         setTouchProgress({ target: null, pct: 0 });
-        if (mismatchWarning) {
-          setStatusTone("warn");
-          setStatusMessage(mismatchWarning.message);
-        }
+        setStatusTone("good");
+        setStatusMessage(readiness.message);
       }
     });
 
@@ -512,17 +529,10 @@ export function SplitArenaPage({ camera, videoRef }: SplitArenaPageProps) {
     };
   }, [game.turn, game.winner, playTapSfx]);
 
-  // Compute live validation badges for player Left & Right hands
-  const leftHandLive = liveHands.find((h) => h.slot === "Left");
-  const rightHandLive = liveHands.find((h) => h.slot === "Right");
-
-  const leftValidation = useMemo(
-    () => (leftHandLive ? validatePlayerHandCount(leftHandLive, game.player) : null),
-    [leftHandLive, game.player],
-  );
-  const rightValidation = useMemo(
-    () => (rightHandLive ? validatePlayerHandCount(rightHandLive, game.player) : null),
-    [rightHandLive, game.player],
+  // Compute live validation & readiness for player hands
+  const readiness = useMemo(
+    () => checkPlayerReadiness(liveHands, game.player),
+    [liveHands, game.player],
   );
 
   const playerCanSplit = game.turn === "Player" && !game.winner && canSplitHands(game.player);
@@ -543,7 +553,7 @@ export function SplitArenaPage({ camera, videoRef }: SplitArenaPageProps) {
       >
         {/* Fullscreen Webcam Layer */}
         <div className="absolute inset-0">
-          <CameraPreview videoRef={videoRef} stream={camera.stream} mirror={mirror} />
+          <CameraPreview videoRef={videoRef} stream={camera.stream} mirror={mirror} fit="cover" />
         </div>
 
         {/* Subtle Top & Bottom Gradient Scrims for Crisp HUD Readability */}
@@ -713,16 +723,27 @@ export function SplitArenaPage({ camera, videoRef }: SplitArenaPageProps) {
                 animate={lunging}
                 transition={{ type: "spring", stiffness: 220, damping: 20 }}
                 onClick={() => {
-                  // Click fallback if player left hand or right hand active count is selected manually
+                  // Click fallback if player hands are ready and valid
                   if (game.turn !== "Player" || isOut || aiAnimatingRef.current) return;
-                  const preferredAttacker: 0 | 1 = game.player[0] > 0 ? 0 : 1;
-                  if (game.player[preferredAttacker] > 0) {
-                    commitPlayerAction({
-                      type: "attack",
-                      from: preferredAttacker,
-                      to: aiIdx,
-                    });
+                  const currentReadiness = checkPlayerReadiness(latestHandsRef.current, game.player);
+                  if (!currentReadiness.canTap) {
+                    setStatusTone(
+                      currentReadiness.status === "need_both_hands" || currentReadiness.status === "need_active_hand"
+                        ? "info"
+                        : "warn",
+                    );
+                    setStatusMessage(currentReadiness.message);
+                    return;
                   }
+                  const preferredAttacker: 0 | 1 =
+                    currentReadiness.leftHand && currentReadiness.leftMatches && game.player[0] > 0
+                      ? 0
+                      : 1;
+                  commitPlayerAction({
+                    type: "attack",
+                    from: preferredAttacker,
+                    to: aiIdx,
+                  });
                 }}
                 className={`pointer-events-auto group relative flex cursor-pointer flex-col items-center rounded-3xl border px-5 py-3 shadow-xl backdrop-blur-md transition-all ${
                   isOut
@@ -854,8 +875,8 @@ export function SplitArenaPage({ camera, videoRef }: SplitArenaPageProps) {
           {([0, 1] as const).map((idx) => {
             const gameCount = game.player[idx];
             const isOut = gameCount === 0;
-            const live = idx === 0 ? leftHandLive : rightHandLive;
-            const validation = idx === 0 ? leftValidation : rightValidation;
+            const live = idx === 0 ? readiness.leftHand : readiness.rightHand;
+            const isMatching = idx === 0 ? readiness.leftMatches : readiness.rightMatches;
             const isAiTargeted =
               aiLunge?.targetPlayerIdx === idx && aiLunge?.phase === "lunging";
             const slotColor = idx === 0 ? "sky" : "violet";
@@ -866,18 +887,20 @@ export function SplitArenaPage({ camera, videoRef }: SplitArenaPageProps) {
                 ref={idx === 0 ? playerLeftAnchorRef : playerRightAnchorRef}
                 className={`relative flex flex-col gap-1 rounded-2xl border px-3.5 py-2.5 backdrop-blur-md transition sm:min-w-[205px] ${
                   isOut
-                    ? "border-slate-300/80 bg-white/75 opacity-70"
-                    : validation?.status === "matched"
-                      ? "border-emerald-400 bg-white/92 ring-2 ring-emerald-400/40 shadow-lg"
-                      : validation?.status === "mismatch"
-                        ? "border-amber-400 bg-amber-50/95 ring-2 ring-amber-400/35 shadow-md"
-                        : "border-white/80 bg-white/88 shadow-md"
+                    ? "border-slate-300/80 bg-white/75 dark:bg-zinc-900/75 opacity-70"
+                    : isMatching
+                      ? "border-emerald-400 bg-white/92 dark:bg-zinc-900/92 ring-2 ring-emerald-400/40 shadow-lg"
+                      : !live
+                        ? "border-amber-400 bg-amber-50/95 dark:bg-amber-950/40 ring-2 ring-amber-400/35 shadow-md"
+                        : "border-rose-400 bg-rose-50/95 dark:bg-rose-950/40 ring-2 ring-rose-400/35 shadow-md"
                 } ${isAiTargeted ? "ring-4 ring-rose-500/60" : ""}`}
               >
                 <div className="flex items-center justify-between gap-3">
                   <span
                     className={`text-xs font-bold uppercase tracking-wider ${
-                      slotColor === "sky" ? "text-sky-700" : "text-violet-700"
+                      slotColor === "sky"
+                        ? "text-sky-700 dark:text-sky-300"
+                        : "text-violet-700 dark:text-violet-300"
                     }`}
                   >
                     Your {idx === 0 ? "Left" : "Right"}
@@ -885,7 +908,7 @@ export function SplitArenaPage({ camera, videoRef }: SplitArenaPageProps) {
                   <span
                     className={`rounded-full px-2.5 py-0.5 text-xs font-extrabold ${
                       isOut
-                        ? "bg-slate-200 text-slate-600"
+                        ? "bg-slate-200 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400"
                         : slotColor === "sky"
                           ? "bg-sky-600 text-white"
                           : "bg-violet-600 text-white"
@@ -895,17 +918,19 @@ export function SplitArenaPage({ camera, videoRef }: SplitArenaPageProps) {
                   </span>
                 </div>
 
-                <div className="text-[11px] font-medium text-slate-600">
+                <div className="text-[11px] font-medium text-slate-600 dark:text-zinc-300">
                   {isOut ? (
-                    "Hand eliminated (Split if eligible)"
+                    "Hand eliminated (can be off-screen)"
                   ) : !live ? (
-                    <span className="text-slate-500">Raise {idx === 0 ? "left" : "right"} hand into view</span>
-                  ) : validation?.status === "matched" ? (
-                    <span className="font-semibold text-emerald-700">
+                    <span className="font-semibold text-amber-700 dark:text-amber-300">
+                      Missing from view — raise hand!
+                    </span>
+                  ) : isMatching ? (
+                    <span className="font-semibold text-emerald-700 dark:text-emerald-300">
                       Detected {live.fingerCount} ✓ Ready to tap
                     </span>
                   ) : (
-                    <span className="font-semibold text-amber-700">
+                    <span className="font-semibold text-rose-700 dark:text-rose-300">
                       Saw {live.fingerCount} — show {gameCount} to tap
                     </span>
                   )}
@@ -929,7 +954,7 @@ export function SplitArenaPage({ camera, videoRef }: SplitArenaPageProps) {
         </div>
 
         {/* Dual-Hand Landmark & Skeleton Overlay (above AI hand cards so touch alignment is visible) */}
-        <HandSkeletonOverlay className="z-[15]" showBadges />
+        <HandSkeletonOverlay className="z-[15]" showBadges fit="cover" />
 
         {/* Subtle Two-Hand Wave Hint Pill in Bottom Center */}
         <div className="pointer-events-none absolute inset-x-0 bottom-4 z-10 hidden justify-center md:flex">

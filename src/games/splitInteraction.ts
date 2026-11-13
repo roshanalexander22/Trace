@@ -116,6 +116,230 @@ export function validatePlayerHandCount(
   };
 }
 
+export interface PlayerReadiness {
+  canTap: boolean;
+  status:
+    | "ready"
+    | "need_both_hands"
+    | "need_active_hand"
+    | "left_mismatch"
+    | "right_mismatch"
+    | "both_mismatch";
+  message: string;
+  leftHand: DetectedHandSummary | null;
+  rightHand: DetectedHandSummary | null;
+  leftMatches: boolean;
+  rightMatches: boolean;
+  aliveCount: number;
+}
+
+/**
+ * Validates whether the player meets all Split game visibility and count requirements:
+ * 1. If both hands are alive, BOTH hands must be visible in view and show their exact finger counts.
+ * 2. If one hand is OUT (0 fingers), the player may keep it offscreen; only the active hand must be visible and match.
+ * 3. Tapping is strictly blocked unless all active hand conditions are fully satisfied.
+ */
+export function checkPlayerReadiness(
+  hands: DetectedHandSummary[],
+  playerCounts: [number, number],
+): PlayerReadiness {
+  const leftAlive = playerCounts[0] > 0;
+  const rightAlive = playerCounts[1] > 0;
+  const aliveCount = (leftAlive ? 1 : 0) + (rightAlive ? 1 : 0);
+
+  if (aliveCount === 0) {
+    return {
+      canTap: false,
+      status: "need_active_hand",
+      message: "No active hands remaining (Game Over)",
+      leftHand: null,
+      rightHand: null,
+      leftMatches: false,
+      rightMatches: false,
+      aliveCount: 0,
+    };
+  }
+
+  // Resolve leftHand and rightHand from detected camera hands
+  let leftHand: DetectedHandSummary | null = null;
+  let rightHand: DetectedHandSummary | null = null;
+
+  if (hands.length === 1) {
+    const single = hands[0];
+    if (leftAlive && !rightAlive) {
+      // Only Left hand is alive in game: single visible hand is the active Left hand
+      leftHand = single;
+    } else if (!leftAlive && rightAlive) {
+      // Only Right hand is alive in game: single visible hand is the active Right hand
+      rightHand = single;
+    } else {
+      // Both hands are alive in game, but player only holds up 1 hand
+      if (single.slot === "Right" || single.wristX > 0.55) {
+        rightHand = single;
+      } else {
+        leftHand = single;
+      }
+    }
+  } else if (hands.length >= 2) {
+    const bySlotLeft = hands.find((h) => h.slot === "Left");
+    const bySlotRight = hands.find((h) => h.slot === "Right");
+
+    if (bySlotLeft && bySlotRight && bySlotLeft !== bySlotRight) {
+      leftHand = bySlotLeft;
+      rightHand = bySlotRight;
+    } else {
+      // Mirrored horizontal order: lower wristX is left of screen, higher wristX is right of screen
+      const sorted = [...hands].sort((a, b) => a.wristX - b.wristX);
+      leftHand = sorted[0];
+      rightHand = sorted[sorted.length - 1];
+    }
+  }
+
+  const leftMatches = leftHand !== null && leftHand.fingerCount === playerCounts[0];
+  const rightMatches = rightHand !== null && rightHand.fingerCount === playerCounts[1];
+
+  // Case 1: Both hands alive in game -> BOTH hands must be on screen and show correct counts
+  if (aliveCount === 2) {
+    if (!leftHand || !rightHand) {
+      const missing = !leftHand && !rightHand ? "both hands" : !leftHand ? "Left hand" : "Right hand";
+      return {
+        canTap: false,
+        status: "need_both_hands",
+        message: `Both hands must be visible! Raise your ${missing} (Left: ${playerCounts[0]}, Right: ${playerCounts[1]})`,
+        leftHand,
+        rightHand,
+        leftMatches,
+        rightMatches,
+        aliveCount,
+      };
+    }
+
+    if (!leftMatches && !rightMatches) {
+      return {
+        canTap: false,
+        status: "both_mismatch",
+        message: `Count mismatch! Show ${playerCounts[0]} on Left (saw ${leftHand.fingerCount}) & ${playerCounts[1]} on Right (saw ${rightHand.fingerCount})`,
+        leftHand,
+        rightHand,
+        leftMatches: false,
+        rightMatches: false,
+        aliveCount,
+      };
+    }
+
+    if (!leftMatches) {
+      return {
+        canTap: false,
+        status: "left_mismatch",
+        message: `Left hand mismatch! Show ${playerCounts[0]} finger${playerCounts[0] === 1 ? "" : "s"} on Left (saw ${leftHand.fingerCount})`,
+        leftHand,
+        rightHand,
+        leftMatches: false,
+        rightMatches: true,
+        aliveCount,
+      };
+    }
+
+    if (!rightMatches) {
+      return {
+        canTap: false,
+        status: "right_mismatch",
+        message: `Right hand mismatch! Show ${playerCounts[1]} finger${playerCounts[1] === 1 ? "" : "s"} on Right (saw ${rightHand.fingerCount})`,
+        leftHand,
+        rightHand,
+        leftMatches: true,
+        rightMatches: false,
+        aliveCount,
+      };
+    }
+
+    return {
+      canTap: true,
+      status: "ready",
+      message: `Both hands ready (${playerCounts[0]} & ${playerCounts[1]})! Reach up to tap an AI hand`,
+      leftHand,
+      rightHand,
+      leftMatches: true,
+      rightMatches: true,
+      aliveCount,
+    };
+  }
+
+  // Case 2: Only Left hand is alive (Right is OUT) -> Right hand may be off-screen
+  if (leftAlive) {
+    if (!leftHand) {
+      return {
+        canTap: false,
+        status: "need_active_hand",
+        message: `Raise your active Left hand into view (${playerCounts[0]} finger${playerCounts[0] === 1 ? "" : "s"})`,
+        leftHand: null,
+        rightHand,
+        leftMatches: false,
+        rightMatches: false,
+        aliveCount,
+      };
+    }
+    if (!leftMatches) {
+      return {
+        canTap: false,
+        status: "left_mismatch",
+        message: `Left hand mismatch! Show ${playerCounts[0]} finger${playerCounts[0] === 1 ? "" : "s"} (saw ${leftHand.fingerCount})`,
+        leftHand,
+        rightHand,
+        leftMatches: false,
+        rightMatches: false,
+        aliveCount,
+      };
+    }
+    return {
+      canTap: true,
+      status: "ready",
+      message: `Left hand ready (${playerCounts[0]})! Reach up to tap an AI hand`,
+      leftHand,
+      rightHand,
+      leftMatches: true,
+      rightMatches: false,
+      aliveCount,
+    };
+  }
+
+  // Case 3: Only Right hand is alive (Left is OUT) -> Left hand may be off-screen
+  if (!rightHand) {
+    return {
+      canTap: false,
+      status: "need_active_hand",
+      message: `Raise your active Right hand into view (${playerCounts[1]} finger${playerCounts[1] === 1 ? "" : "s"})`,
+      leftHand,
+      rightHand: null,
+      leftMatches: false,
+      rightMatches: false,
+      aliveCount,
+    };
+  }
+  if (!rightMatches) {
+    return {
+      canTap: false,
+      status: "right_mismatch",
+      message: `Right hand mismatch! Show ${playerCounts[1]} finger${playerCounts[1] === 1 ? "" : "s"} (saw ${rightHand.fingerCount})`,
+      leftHand,
+      rightHand,
+      leftMatches: false,
+      rightMatches: false,
+      aliveCount,
+    };
+  }
+  return {
+    canTap: true,
+    status: "ready",
+    message: `Right hand ready (${playerCounts[1]})! Reach up to tap an AI hand`,
+    leftHand,
+    rightHand,
+    leftMatches: false,
+    rightMatches: true,
+    aliveCount,
+  };
+}
+
 const SPLIT_JOIN_LANDMARKS = [0, 4, 8, 9, 12, 17, 20] as const;
 
 /**

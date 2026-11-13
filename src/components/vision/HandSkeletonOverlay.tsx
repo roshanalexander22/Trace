@@ -40,12 +40,16 @@ interface HandSkeletonOverlayProps {
 
 export function HandSkeletonOverlay({
   className = "",
-  fit = "cover",
+  fit,
   muted = false,
   showBadges = false,
 }: HandSkeletonOverlayProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const cameraEnabled = useAppStore((s) => s.cameraEnabled);
+  const storeCameraFit = useAppStore((s) => s.cameraFit);
+  const effectiveFit = fit ?? storeCameraFit;
+  const fitRef = useRef(effectiveFit);
+  fitRef.current = effectiveFit;
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -112,7 +116,7 @@ export function HandSkeletonOverlay({
             ev.metrics.videoHeight,
             viewW,
             viewH,
-            fit,
+            fitRef.current,
           ),
         );
 
@@ -172,7 +176,7 @@ export function HandSkeletonOverlay({
       ro.disconnect();
       unsub();
     };
-  }, [fit, muted, showBadges, cameraEnabled]);
+  }, [effectiveFit, muted, showBadges, cameraEnabled]);
 
   return (
     <canvas

@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { visionBus } from "../../vision/visionBus";
 import { mapVideoNormToViewport } from "../../vision/coordinateMapper";
+import { useAppStore } from "../../store/useAppStore";
 import { useDrawingStore } from "../../store/useDrawingStore";
 
 interface GestureCursorProps {
@@ -12,6 +13,9 @@ export function GestureCursor({ containerRef, onDwellTrigger }: GestureCursorPro
   const cursorRef = useRef<HTMLDivElement | null>(null);
   const progressRef = useRef<SVGCircleElement | null>(null);
   const dwellTargetRef = useRef<{ id: string; startMs: number; triggered: boolean } | null>(null);
+  const cameraFit = useAppStore((s) => s.cameraFit);
+  const cameraFitRef = useRef(cameraFit);
+  cameraFitRef.current = cameraFit;
 
   useEffect(() => {
     const DWELL_MS = 650;
@@ -36,7 +40,7 @@ export function GestureCursor({ containerRef, onDwellTrigger }: GestureCursorPro
         ev.metrics.videoHeight,
         rect.width,
         rect.height,
-        "cover",
+        cameraFitRef.current,
       );
 
       const state = ev.frame.drawing_state;

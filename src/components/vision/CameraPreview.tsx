@@ -7,6 +7,7 @@ interface CameraPreviewProps {
   stream?: MediaStream | null;
   mirror: boolean;
   className?: string;
+  fit?: "cover" | "contain";
 }
 
 export function CameraPreview({
@@ -14,9 +15,12 @@ export function CameraPreview({
   stream,
   mirror,
   className = "",
+  fit,
 }: CameraPreviewProps) {
   const cameraEnabled = useAppStore((s) => s.cameraEnabled);
   const setCameraEnabled = useAppStore((s) => s.setCameraEnabled);
+  const storeCameraFit = useAppStore((s) => s.cameraFit);
+  const effectiveFit = fit ?? storeCameraFit;
 
   useEffect(() => {
     const el = videoRef.current;
@@ -38,27 +42,46 @@ export function CameraPreview({
         playsInline
         muted
         autoPlay
-        className={`h-full w-full object-cover ${mirror ? "-scale-x-100" : ""} ${
-          !cameraEnabled ? "opacity-0" : ""
-        } ${className}`}
+        className={`h-full w-full ${effectiveFit === "contain" ? "object-contain" : "object-cover"} ${
+          mirror ? "-scale-x-100" : ""
+        } ${!cameraEnabled ? "opacity-0" : ""} ${className}`}
       />
       {!cameraEnabled && (
-        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-slate-100/95 p-6 text-center backdrop-blur-xs">
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-slate-200 bg-white text-rose-500 shadow-xs">
-            <CameraOff className="h-6 w-6" />
+        <div
+          className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 p-6 text-center backdrop-blur-md"
+          style={{
+            backgroundColor: "var(--bg-surface)",
+            color: "var(--text-primary)",
+          }}
+        >
+          <div
+            className="flex h-12 w-12 items-center justify-center rounded-2xl border shadow-xs"
+            style={{
+              backgroundColor: "var(--bg-well)",
+              borderColor: "var(--border-hairline)",
+              color: "var(--accent-primary)",
+            }}
+          >
+            <CameraOff className="h-6 w-6" strokeWidth={1.5} />
           </div>
           <div>
-            <p className="text-sm font-bold text-slate-800">Camera is Turned Off</p>
-            <p className="mt-0.5 text-xs text-slate-500">
+            <p className="text-sm font-bold" style={{ color: "var(--text-primary)" }}>
+              Camera is Turned Off
+            </p>
+            <p className="mt-0.5 text-xs" style={{ color: "var(--text-secondary)" }}>
               Your webcam feed is paused and hardware tracks are released.
             </p>
           </div>
           <button
             type="button"
             onClick={() => setCameraEnabled(true)}
-            className="inline-flex items-center gap-1.5 rounded-xl bg-sky-600 px-3.5 py-2 text-xs font-semibold text-white shadow-xs transition hover:bg-sky-500"
+            className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold shadow-xs interactive-control"
+            style={{
+              backgroundColor: "var(--accent-primary)",
+              color: "var(--accent-contrast)",
+            }}
           >
-            <Camera className="h-3.5 w-3.5" />
+            <Camera className="h-3.5 w-3.5" strokeWidth={1.5} />
             Turn Camera On
           </button>
         </div>

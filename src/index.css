@@ -1,6 +1,7 @@
 @import "tailwindcss";
 
 :root {
+  color-scheme: light;
   /* Typography */
   --font-sans: "Plus Jakarta Sans", "Segoe UI Variable", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", "Cascadia Code", monospace;
@@ -23,6 +24,7 @@
 }
 
 [data-theme="dark"] {
+  color-scheme: dark;
   /* Dark Mode — Obsidian Studio */
   --bg-canvas: #111113;
   --bg-surface: #18181B;
@@ -34,6 +36,25 @@
   --accent-contrast: #111113;
   --accent-subtle: rgba(240, 100, 59, 0.14);
   --status-ready: #2BB673;
+}
+
+select,
+option {
+  font-family: inherit;
+}
+
+[data-theme="dark"] select,
+[data-theme="dark"] option {
+  color-scheme: dark !important;
+  background-color: #18181B !important;
+  color: #F4F4F2 !important;
+}
+
+[data-theme="light"] select,
+[data-theme="light"] option {
+  color-scheme: light !important;
+  background-color: #FAF9F6 !important;
+  color: #161618 !important;
 }
 
 @layer base {

@@ -1,4 +1,4 @@
-import { useEffect, useRef, type RefObject } from "react";
+import { useEffect, type RefObject } from "react";
 import { workerClient } from "../vision/workerClient";
 import { visionBus } from "../vision/visionBus";
 import { useAppStore } from "../store/useAppStore";
@@ -12,7 +12,6 @@ export function useHandTracking(
   const setVisionReady = useAppStore((s) => s.setVisionReady);
   const setVisionError = useAppStore((s) => s.setVisionError);
   const setLiveTelemetry = useAppStore((s) => s.setLiveTelemetry);
-  const prevDelegateRef = useRef(calibration.delegate);
 
   useEffect(() => {
     workerClient.start(calibration, {
@@ -60,23 +59,8 @@ export function useHandTracking(
   }, []);
 
   useEffect(() => {
-    if (prevDelegateRef.current !== calibration.delegate) {
-      prevDelegateRef.current = calibration.delegate;
-      workerClient.start(calibration, {
-        onReady: (delegate) => {
-          setVisionReady(true, delegate);
-          if (streamActive && trackingEnabled) {
-            workerClient.attachVideo(videoRef);
-          }
-        },
-        onError: (msg) => {
-          setVisionError(msg);
-        },
-      });
-    } else {
-      workerClient.updateCalibration(calibration);
-    }
-  }, [calibration, streamActive, trackingEnabled, videoRef, setVisionReady, setVisionError]);
+    workerClient.updateCalibration(calibration);
+  }, [calibration]);
 
   useEffect(() => {
     if (streamActive && trackingEnabled) {

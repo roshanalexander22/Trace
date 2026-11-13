@@ -149,7 +149,7 @@ impl Default for CalibrationProfile {
             preferred_camera_id: None,
             mirror_feed: true,
             fps_cap: 60,
-            delegate: "GPU".to_string(),
+            delegate: "NVIDIA".to_string(),
         }
     }
 }

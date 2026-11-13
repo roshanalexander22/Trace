@@ -9,6 +9,8 @@ import {
 
 export type AppMode = "home" | "rps" | "split" | "cricket" | "canvas" | "settings";
 export type AppTheme = "light" | "dark";
+export type GameLayoutPreset = "camera-left" | "camera-right" | "stadium" | "cinema";
+export type CameraVideoFit = "cover" | "contain";
 
 export interface LiveTelemetry {
   fps: number;
@@ -36,10 +38,17 @@ interface AppStoreState {
   calibration: CalibrationProfile;
   live: LiveTelemetry;
   systemTelemetry: SystemTelemetryDto;
+  gameLayout: GameLayoutPreset;
+  cameraFit: CameraVideoFit;
 
   setMode: (mode: AppMode) => void;
   setTheme: (theme: AppTheme) => void;
   toggleTheme: () => void;
+  setGameLayout: (layout: GameLayoutPreset) => void;
+  toggleGameLayout: () => void;
+  swapGamePanels: () => void;
+  setCameraFit: (fit: CameraVideoFit) => void;
+  toggleCameraFit: () => void;
   setNavCollapsed: (collapsed: boolean) => void;
   toggleNav: () => void;
   setCameraEnabled: (enabled: boolean) => void;
@@ -63,9 +72,34 @@ const getStoredTheme = (): AppTheme => {
   return "light";
 };
 
+const getStoredGameLayout = (): GameLayoutPreset => {
+  try {
+    const saved = localStorage.getItem("trace_game_layout");
+    if (
+      saved === "camera-left" ||
+      saved === "camera-right" ||
+      saved === "stadium" ||
+      saved === "cinema"
+    ) {
+      return saved;
+    }
+  } catch {}
+  return "camera-left";
+};
+
+const getStoredCameraFit = (): CameraVideoFit => {
+  try {
+    const saved = localStorage.getItem("trace_camera_fit");
+    if (saved === "cover" || saved === "contain") return saved;
+  } catch {}
+  return "cover";
+};
+
 export const useAppStore = create<AppStoreState>((set) => ({
   mode: "home",
   theme: getStoredTheme(),
+  gameLayout: getStoredGameLayout(),
+  cameraFit: getStoredCameraFit(),
   navCollapsed: false,
   cameraEnabled: true,
   trackingEnabled: true,
@@ -76,7 +110,7 @@ export const useAppStore = create<AppStoreState>((set) => ({
   live: {
     fps: 0,
     inferenceMs: 0,
-    activeDelegate: "GPU",
+    activeDelegate: "NVIDIA",
     detected: false,
     stableGesture: "None",
     drawingState: "Idle",
@@ -96,6 +130,7 @@ export const useAppStore = create<AppStoreState>((set) => ({
       localStorage.setItem("trace_theme", theme);
     } catch {}
     document.documentElement.setAttribute("data-theme", theme);
+    document.documentElement.style.colorScheme = theme;
     set({ theme });
   },
   toggleTheme: () =>
@@ -105,7 +140,50 @@ export const useAppStore = create<AppStoreState>((set) => ({
         localStorage.setItem("trace_theme", next);
       } catch {}
       document.documentElement.setAttribute("data-theme", next);
+      document.documentElement.style.colorScheme = next;
       return { theme: next };
+    }),
+  setGameLayout: (gameLayout) => {
+    try {
+      localStorage.setItem("trace_game_layout", gameLayout);
+    } catch {}
+    set({ gameLayout });
+  },
+  toggleGameLayout: () =>
+    set((s) => {
+      const order: GameLayoutPreset[] = ["camera-left", "camera-right", "stadium", "cinema"];
+      const next = order[(order.indexOf(s.gameLayout) + 1) % order.length];
+      try {
+        localStorage.setItem("trace_game_layout", next);
+      } catch {}
+      return { gameLayout: next };
+    }),
+  swapGamePanels: () =>
+    set((s) => {
+      const next: GameLayoutPreset =
+        s.gameLayout === "camera-left"
+          ? "camera-right"
+          : s.gameLayout === "camera-right"
+            ? "camera-left"
+            : "camera-left";
+      try {
+        localStorage.setItem("trace_game_layout", next);
+      } catch {}
+      return { gameLayout: next };
+    }),
+  setCameraFit: (cameraFit) => {
+    try {
+      localStorage.setItem("trace_camera_fit", cameraFit);
+    } catch {}
+    set({ cameraFit });
+  },
+  toggleCameraFit: () =>
+    set((s) => {
+      const next: CameraVideoFit = s.cameraFit === "cover" ? "contain" : "cover";
+      try {
+        localStorage.setItem("trace_camera_fit", next);
+      } catch {}
+      return { cameraFit: next };
     }),
   setNavCollapsed: (navCollapsed) => set({ navCollapsed }),
   toggleNav: () => set((s) => ({ navCollapsed: !s.navCollapsed })),

@@ -26,6 +26,7 @@ const TITLE_MAP: Record<AppMode, { title: string; subtitle: string }> = {
 
 export function TopHeader({ camera }: TopHeaderProps) {
   const mode = useAppStore((s) => s.mode);
+  const theme = useAppStore((s) => s.theme);
   const cameraEnabled = useAppStore((s) => s.cameraEnabled);
   const toggleCamera = useAppStore((s) => s.toggleCamera);
   const trackingEnabled = useAppStore((s) => s.trackingEnabled);
@@ -92,12 +93,25 @@ export function TopHeader({ camera }: TopHeaderProps) {
             value={camera.activeDeviceId ?? ""}
             onChange={(e) => void handleSelectCamera(e.target.value)}
             disabled={camera.isStarting || !cameraEnabled}
-            className="pl-7 pr-6 py-1 bg-transparent font-medium rounded-lg text-xs outline-none max-w-[140px] sm:max-w-[190px] truncate disabled:opacity-50 cursor-pointer"
-            style={{ color: "var(--text-primary)" }}
+            className="pl-7 pr-6 py-1 bg-[var(--bg-surface)] text-[var(--text-primary)] font-medium rounded-lg text-xs outline-none max-w-[140px] sm:max-w-[190px] truncate disabled:opacity-50 cursor-pointer"
+            style={{
+              colorScheme: theme === "dark" ? "dark" : "light",
+            }}
           >
-            {camera.devices.length === 0 && <option value="">Default Camera</option>}
+            {camera.devices.length === 0 && (
+              <option
+                value=""
+                className="bg-[var(--bg-surface)] text-[var(--text-primary)]"
+              >
+                Default Camera
+              </option>
+            )}
             {camera.devices.map((d) => (
-              <option key={d.deviceId} value={d.deviceId}>
+              <option
+                key={d.deviceId}
+                value={d.deviceId}
+                className="bg-[var(--bg-surface)] text-[var(--text-primary)]"
+              >
                 {d.label}
               </option>
             ))}

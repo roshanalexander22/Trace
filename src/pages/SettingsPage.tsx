@@ -1,19 +1,27 @@
 import {
+  ArrowLeftRight,
   Camera,
-  Check,
   ExternalLink,
+  LayoutGrid,
+  Maximize2,
+  PanelLeft,
+  PanelRight,
   RefreshCw,
-  RotateCcw,
+  Rows3,
   Save,
   Sliders,
   SwitchCamera,
-  Zap,
 } from "lucide-react";
 import { useState } from "react";
 import type { CameraState } from "../hooks/useCamera";
 import { platform } from "../platform";
 import { DEFAULT_CALIBRATION } from "../platform/types";
-import { useAppStore } from "../store/useAppStore";
+import { formatGpuName, formatGpuShort } from "../platform/gpuFormatter";
+import {
+  useAppStore,
+  type CameraVideoFit,
+  type GameLayoutPreset,
+} from "../store/useAppStore";
 
 interface SettingsPageProps {
   camera: CameraState;
@@ -22,18 +30,23 @@ interface SettingsPageProps {
 const FINGER_NAMES = ["Thumb IP", "Index", "Middle", "Ring", "Pinky"];
 
 export function SettingsPage({ camera }: SettingsPageProps) {
+  const theme = useAppStore((s) => s.theme);
   const calibration = useAppStore((s) => s.calibration);
   const live = useAppStore((s) => s.live);
+  const gameLayout = useAppStore((s) => s.gameLayout);
+  const setGameLayout = useAppStore((s) => s.setGameLayout);
+  const cameraFit = useAppStore((s) => s.cameraFit);
+  const setCameraFit = useAppStore((s) => s.setCameraFit);
+  const swapGamePanels = useAppStore((s) => s.swapGamePanels);
   const patchCalibration = useAppStore((s) => s.patchCalibration);
   const setCalibration = useAppStore((s) => s.setCalibration);
   const [savedNotice, setSavedNotice] = useState(false);
-  const [needsRestart, setNeedsRestart] = useState(false);
 
   const handleDelegateChange = async (val: string) => {
     patchCalibration({ delegate: val });
-    const ok = await platform.setGpuPreference(val).catch(() => false);
-    if (ok) {
-      setNeedsRestart(true);
+    void platform.saveCalibration({ ...calibration, delegate: val }).catch(() => {});
+    if (val !== "CPU") {
+      void platform.setGpuPreference(val).catch(() => {});
     }
   };
 
@@ -157,8 +170,14 @@ export function SettingsPage({ camera }: SettingsPageProps) {
                 onChange={(e) => {
                   const nextFps = Number(e.target.value);
                   patchCalibration({ fps_cap: nextFps });
+                  void platform.saveCalibration({ ...calibration, fps_cap: nextFps }).catch(() => {});
                 }}
-                className="rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-well)] px-3 py-2 text-xs text-[var(--text-primary)] outline-none transition focus:border-[var(--accent-primary)]"
+                className="rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-well)] px-3 py-2 text-xs text-[var(--text-primary)] outline-none transition focus:border-[var(--accent-primary)] cursor-pointer"
+                style={{
+                  colorScheme: theme === "dark" ? "dark" : "light",
+                  backgroundColor: "var(--bg-well)",
+                  color: "var(--text-primary)",
+                }}
               >
                 <option value={15}>15 FPS (Battery Saver)</option>
                 <option value={30}>30 FPS (Balanced — Recommended)</option>
@@ -166,134 +185,48 @@ export function SettingsPage({ camera }: SettingsPageProps) {
               </select>
             </label>
 
-            {/* 3 Hardware Delegate Options: NVIDIA, CPU, iGPU */}
-            <div className="flex flex-col gap-2">
+            {/* Hardware Acceleration Dropdown */}
+            <label className="flex flex-col gap-1.5 text-xs">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-[var(--text-primary)]">
-                  Hardware Acceleration (3 Options)
-                </span>
+                <span className="font-medium text-[var(--text-secondary)]">Hardware Acceleration</span>
                 <button
                   type="button"
                   onClick={() => void platform.openGraphicsSettings()}
-                  className="inline-flex items-center gap-1 text-[10px] font-semibold text-[var(--accent-primary)] hover:underline"
+                  className="inline-flex items-center gap-1 text-[10px] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:underline"
                 >
                   <ExternalLink className="h-3 w-3" />
                   Windows Graphics Settings
                 </button>
               </div>
+              <select
+                value={
+                  (calibration.delegate || "GPU").toUpperCase() === "CPU"
+                    ? "CPU"
+                    : "GPU"
+                }
+                onChange={(e) => void handleDelegateChange(e.target.value)}
+                className="rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-well)] px-3 py-2 text-xs text-[var(--text-primary)] outline-none transition focus:border-[var(--accent-primary)] cursor-pointer"
+                style={{
+                  colorScheme: theme === "dark" ? "dark" : "light",
+                  backgroundColor: "var(--bg-well)",
+                  color: "var(--text-primary)",
+                }}
+              >
+                <option value="GPU">{formatGpuName(live.rendererName)} — Hardware Accelerated</option>
+                <option value="CPU">CPU (WASM SIMD Multi-Core) — Zero GPU / Battery Saver</option>
+              </select>
+              <span className="text-[10px] text-[var(--text-secondary)] leading-relaxed">
+                {(calibration.delegate || "GPU").toUpperCase() === "CPU"
+                  ? "Running on multithreaded CPU via WASM SIMD. Zero GPU load. Hot-switching with GPU is instant."
+                  : `Running on hardware-accelerated ${formatGpuShort(live.rendererName)} (${formatGpuName(live.rendererName)}). Hot-switching with CPU is instant.`}
+              </span>
+            </label>
 
-              <div className="grid grid-cols-1 gap-2">
-                {/* Option 1: NVIDIA GeForce RTX */}
-                <button
-                  type="button"
-                  onClick={() => void handleDelegateChange("NVIDIA")}
-                  className="flex flex-col p-3 rounded-xl border text-left transition relative cursor-pointer"
-                  style={{
-                    backgroundColor:
-                      (calibration.delegate || "NVIDIA").toUpperCase().includes("NVIDIA") ||
-                      calibration.delegate === "GPU"
-                        ? "rgba(43, 182, 115, 0.12)"
-                        : "var(--bg-well)",
-                    borderColor:
-                      (calibration.delegate || "NVIDIA").toUpperCase().includes("NVIDIA") ||
-                      calibration.delegate === "GPU"
-                        ? "var(--status-ready)"
-                        : "var(--border-hairline)",
-                  }}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-xs flex items-center gap-1.5" style={{ color: "var(--status-ready)" }}>
-                      <Zap className="w-3.5 h-3.5" />
-                      NVIDIA GPU (GeForce RTX 3050)
-                    </span>
-                    {((calibration.delegate || "NVIDIA").toUpperCase().includes("NVIDIA") || calibration.delegate === "GPU") && (
-                      <Check className="w-3.5 h-3.5" style={{ color: "var(--status-ready)" }} />
-                    )}
-                  </div>
-                  <span className="text-[11px] mt-1 text-[var(--text-secondary)]">
-                    Fastest throughput (~3–5ms). Dedicated 6GB GDDR6 VRAM, CUDA &amp; tensor shaders.
-                  </span>
-                </button>
-
-                {/* Option 2: CPU SIMD */}
-                <button
-                  type="button"
-                  onClick={() => void handleDelegateChange("CPU")}
-                  className="flex flex-col p-3 rounded-xl border text-left transition relative cursor-pointer"
-                  style={{
-                    backgroundColor:
-                      calibration.delegate === "CPU"
-                        ? "rgba(2, 132, 199, 0.12)"
-                        : "var(--bg-well)",
-                    borderColor:
-                      calibration.delegate === "CPU"
-                        ? "#0284c7"
-                        : "var(--border-hairline)",
-                  }}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-xs flex items-center gap-1.5" style={{ color: "#0284c7" }}>
-                      CPU (WASM SIMD Multi-Core)
-                    </span>
-                    {calibration.delegate === "CPU" && (
-                      <Check className="w-3.5 h-3.5 text-sky-600" />
-                    )}
-                  </div>
-                  <span className="text-[11px] mt-1 text-[var(--text-secondary)]">
-                    Silky smooth (~12–15ms). Zero GPU usage, bypasses graphics drivers completely.
-                  </span>
-                </button>
-
-                {/* Option 3: Integrated GPU */}
-                <button
-                  type="button"
-                  onClick={() => void handleDelegateChange("iGPU")}
-                  className="flex flex-col p-3 rounded-xl border text-left transition relative cursor-pointer"
-                  style={{
-                    backgroundColor:
-                      (calibration.delegate || "").toUpperCase().includes("IGPU")
-                        ? "rgba(217, 119, 6, 0.12)"
-                        : "var(--bg-well)",
-                    borderColor:
-                      (calibration.delegate || "").toUpperCase().includes("IGPU")
-                        ? "#d97706"
-                        : "var(--border-hairline)",
-                  }}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-xs flex items-center gap-1.5" style={{ color: "#d97706" }}>
-                      Integrated GPU (AMD Radeon iGPU)
-                    </span>
-                    {(calibration.delegate || "").toUpperCase().includes("IGPU") && (
-                      <Check className="w-3.5 h-3.5 text-amber-600" />
-                    )}
-                  </div>
-                  <span className="text-[11px] mt-1 text-[var(--text-secondary)]">
-                    Power saving on battery. Uses shared system memory; higher compute latency (~60–100ms).
-                  </span>
-                </button>
-              </div>
-
-              <div className="flex items-center justify-between px-3 py-2 rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-well)] text-[11px] font-mono">
-                <span className="text-[var(--text-secondary)]">Active Device:</span>
-                <span className="font-semibold truncate max-w-[280px] text-[var(--text-primary)]" title={live.rendererName || live.activeDelegate}>
-                  {live.rendererName || live.activeDelegate}
-                </span>
-              </div>
-
-              {needsRestart && (
-                <div className="flex items-center justify-between p-3 rounded-xl border border-amber-300 bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200 text-xs mt-1">
-                  <span>Hardware preference saved. Restart to switch active DirectX GPU adapter.</span>
-                  <button
-                    type="button"
-                    onClick={() => void platform.restartApplication()}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-xs transition cursor-pointer"
-                  >
-                    <RotateCcw className="w-3 h-3" />
-                    Restart App
-                  </button>
-                </div>
-              )}
+            <div className="flex items-center justify-between px-1 text-[11px] text-[var(--text-secondary)]">
+              <span>Active Graphics Adapter</span>
+              <span className="font-mono text-[10px] truncate max-w-[260px] text-[var(--text-primary)]" title={live.rendererName || live.activeDelegate}>
+                {live.rendererName || live.activeDelegate}
+              </span>
             </div>
           </div>
         </section>
@@ -415,6 +348,111 @@ export function SettingsPage({ camera }: SettingsPageProps) {
                   </div>
                 );
               })}
+            </div>
+          </div>
+        </section>
+
+        {/* Section 3 (Full Width): Game Arena Layout & Presentation Configuration */}
+        <section className="lg:col-span-2 flex flex-col gap-4 rounded-2xl border border-[var(--border-hairline)] bg-[var(--bg-surface)] p-5 shadow-xs">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2 text-sm font-semibold text-[var(--text-primary)]">
+              <LayoutGrid className="h-4 w-4 text-[var(--accent-primary)]" />
+              Game Arena Layout & Presentation
+            </div>
+            <button
+              type="button"
+              onClick={swapGamePanels}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-well)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] interactive-control hover:opacity-80 transition"
+            >
+              <ArrowLeftRight className="h-3.5 w-3.5" strokeWidth={1.5} />
+              <span>Swap Left / Right Panels</span>
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            {[
+              {
+                id: "camera-left" as GameLayoutPreset,
+                name: "Classic Left",
+                icon: PanelLeft,
+                desc: "Camera Stage on Left (58%), Opponent & Scoreboard on Right (42%). Optimal for right-handed setups.",
+              },
+              {
+                id: "camera-right" as GameLayoutPreset,
+                name: "Inverted Right",
+                icon: PanelRight,
+                desc: "Opponent & Scoreboard on Left (42%), Camera Stage on Right (58%). Optimal for streaming or left-handed focus.",
+              },
+              {
+                id: "stadium" as GameLayoutPreset,
+                name: "Stadium Showdown",
+                icon: Rows3,
+                desc: "Top Dual Stage (Camera & Opponent side-by-side), Bottom Full-Width Scoreboard & Timeline stream.",
+              },
+              {
+                id: "cinema" as GameLayoutPreset,
+                name: "Cinema Hero",
+                icon: Maximize2,
+                desc: "Full Expanded Hero Camera Stage with compact HUD side-dock. Maximum gesture tracking immersion.",
+              },
+            ].map(({ id, name, icon: Icon, desc }) => {
+              const active = gameLayout === id;
+              return (
+                <div
+                  key={id}
+                  onClick={() => setGameLayout(id)}
+                  className={`flex flex-col gap-2 p-3.5 rounded-xl border cursor-pointer transition interactive-control ${
+                    active
+                      ? "border-[var(--accent-primary)] bg-[var(--accent-subtle)]"
+                      : "border-[var(--border-hairline)] bg-[var(--bg-well)]/60 hover:bg-[var(--bg-well)]"
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span
+                      className="inline-flex items-center gap-1.5 text-xs font-bold"
+                      style={{ color: active ? "var(--accent-primary)" : "var(--text-primary)" }}
+                    >
+                      <Icon className="h-4 w-4" strokeWidth={1.5} />
+                      {name}
+                    </span>
+                    {active && (
+                      <span className="w-2 h-2 rounded-full bg-[var(--accent-primary)]" />
+                    )}
+                  </div>
+                  <p className="text-[11px] leading-relaxed text-[var(--text-secondary)]">
+                    {desc}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Camera Feed Video Fit Mode */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-2 border-t border-[var(--border-hairline)]">
+            <div className="flex flex-col gap-0.5">
+              <span className="text-xs font-medium text-[var(--text-primary)]">
+                Webcam Feed Aspect Fit
+              </span>
+              <span className="text-[11px] text-[var(--text-secondary)]">
+                Choose how video frames fill the responsive rounded stage container.
+              </span>
+            </div>
+
+            <div className="inline-flex rounded-xl border border-[var(--border-hairline)] p-1 bg-[var(--bg-well)]">
+              {(["cover", "contain"] as CameraVideoFit[]).map((fit) => (
+                <button
+                  key={fit}
+                  type="button"
+                  onClick={() => setCameraFit(fit)}
+                  className={`px-3 py-1 rounded-lg text-xs font-medium capitalize interactive-control transition ${
+                    cameraFit === fit
+                      ? "bg-[var(--bg-surface)] text-[var(--accent-primary)] font-semibold shadow-2xs"
+                      : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                  }`}
+                >
+                  {fit === "cover" ? "Cover (Full Fill — Zero Void)" : "Contain (Letterbox)"}
+                </button>
+              ))}
             </div>
           </div>
         </section>

@@ -5,6 +5,7 @@ import {
   FlipHorizontal,
   FolderOpen,
   Paintbrush,
+  Ratio,
   Split as SplitIcon,
   Swords,
   Trophy,
@@ -31,6 +32,8 @@ export function HomePage({ camera, videoRef }: HomePageProps) {
   const live = useAppStore((s) => s.live);
   const visionReady = useAppStore((s) => s.visionReady);
   const visionError = useAppStore((s) => s.visionError);
+  const cameraFit = useAppStore((s) => s.cameraFit);
+  const toggleCameraFit = useAppStore((s) => s.toggleCameraFit);
   const loadArtworkData = useDrawingStore((s) => s.loadArtworkData);
 
   const [showSkeleton, setShowSkeleton] = useState(true);
@@ -439,12 +442,12 @@ export function HomePage({ camera, videoRef }: HomePageProps) {
               />
             ) : (
               <>
-                <CameraPreview videoRef={videoRef} stream={camera.stream} mirror={mirror} />
-                {showSkeleton && <HandSkeletonOverlay showBadges />}
+                <CameraPreview videoRef={videoRef} stream={camera.stream} mirror={mirror} fit={cameraFit} />
+                {showSkeleton && <HandSkeletonOverlay showBadges fit={cameraFit} />}
               </>
             )}
 
-            {/* Top-Right Tucked Glass Controls (Mirror + Skeleton Toggles) */}
+            {/* Top-Right Tucked Glass Controls (Mirror + Fit + Skeleton Toggles) */}
             <div className="absolute top-2.5 right-2.5 z-20 flex items-center gap-1.5">
               <button
                 type="button"
@@ -458,6 +461,20 @@ export function HomePage({ camera, videoRef }: HomePageProps) {
                 }}
               >
                 <FlipHorizontal className="w-3.5 h-3.5" strokeWidth={1.5} />
+              </button>
+
+              <button
+                type="button"
+                onClick={toggleCameraFit}
+                title={`Aspect Fit: currently ${cameraFit === "cover" ? "Cover (Fill Container)" : "Contain (Letterbox)"}. Click to toggle.`}
+                className="p-1.5 rounded-lg border text-xs backdrop-blur-md interactive-control"
+                style={{
+                  backgroundColor: cameraFit === "contain" ? "var(--bg-surface)" : "var(--bg-well)",
+                  borderColor: "var(--border-hairline)",
+                  color: cameraFit === "contain" ? "var(--accent-primary)" : "var(--text-secondary)",
+                }}
+              >
+                <Ratio className="w-3.5 h-3.5" strokeWidth={1.5} />
               </button>
 
               <button

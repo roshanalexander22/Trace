@@ -1,6 +1,8 @@
 import { AlertTriangle } from "lucide-react";
+import { formatGpuShort } from "../../platform/gpuFormatter";
 import { platform } from "../../platform";
 import { useAppStore } from "../../store/useAppStore";
+import { workerClient } from "../../vision/workerClient";
 
 const FINGER_LABELS = ["T", "I", "M", "R", "P"];
 
@@ -101,44 +103,35 @@ export function StatusBar() {
 
       {/* Right: Monospace Tabular Telemetry (Zero Jitter) */}
       <div className="flex items-center gap-3 telemetry-value text-[11px] font-medium whitespace-nowrap">
-        <span>
+        <button
+          type="button"
+          onClick={() => workerClient.refreshEngine()}
+          title="Click to manually refresh Vision Engine"
+          className="hover:text-[var(--text-primary)] transition cursor-pointer"
+        >
           {live.fps} FPS <span style={{ opacity: 0.5 }}>·</span> {live.inferenceMs.toFixed(1)} ms
-        </span>
+        </button>
         <span style={{ opacity: 0.5 }}>·</span>
         <button
           type="button"
           onClick={() => {
-            const current = (calibration.delegate || "NVIDIA").toUpperCase();
-            let next: "NVIDIA" | "CPU" | "iGPU" = "NVIDIA";
-            if (current.includes("NVIDIA") || current === "GPU") {
-              next = "CPU";
-            } else if (current === "CPU") {
-              next = "iGPU";
-            } else {
-              next = "NVIDIA";
-            }
+            const current = (calibration.delegate || "GPU").toUpperCase();
+            const next = current === "CPU" ? "GPU" : "CPU";
             patchCalibration({ delegate: next });
-            void platform.setGpuPreference(next).catch(() => {});
             void platform.saveCalibration({ ...calibration, delegate: next }).catch(() => {});
+            if (next !== "CPU") {
+              void platform.setGpuPreference(next).catch(() => {});
+            }
           }}
-          className="inline-flex items-center gap-1 font-bold uppercase tracking-wider px-2 py-0.5 rounded border text-[10px] interactive-control cursor-pointer hover:opacity-85 transition"
+          className="inline-flex items-center gap-1 font-semibold uppercase tracking-wider px-2 py-0.5 rounded border text-[10px] interactive-control cursor-pointer hover:bg-[var(--bg-well)] hover:text-[var(--text-primary)] transition"
           style={{
             borderColor: "var(--border-hairline)",
             backgroundColor: "var(--bg-surface)",
-            color:
-              live.activeDelegate.includes("NVIDIA") || live.activeDelegate === "GPU"
-                ? "var(--status-ready)"
-                : live.activeDelegate === "CPU"
-                  ? "#0284c7"
-                  : "#d97706",
+            color: "var(--text-secondary)",
           }}
-          title={`Active Hardware: ${live.activeDelegate}. Click to cycle: NVIDIA RTX -> CPU (SIMD) -> AMD iGPU`}
+          title={`Active Hardware: ${live.rendererName || live.activeDelegate}. Click to switch between ${formatGpuShort(live.rendererName)} and CPU SIMD`}
         >
-          {live.activeDelegate.includes("NVIDIA")
-            ? "NVIDIA RTX"
-            : live.activeDelegate === "CPU"
-              ? "CPU SIMD"
-              : "iGPU"}
+          {live.activeDelegate === "CPU" ? "CPU SIMD" : formatGpuShort(live.rendererName)}
         </button>
         {sys.memory_mb > 0 && (
           <>

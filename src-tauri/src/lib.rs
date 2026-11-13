@@ -59,7 +59,7 @@ pub fn run() {
             #[cfg(target_os = "windows")]
             {
                 // Ensure registry entry exists for High Performance GPU
-                let _ = system::apply_gpu_preference("NVIDIA");
+                let _ = system::apply_gpu_preference("GPU");
             }
 
             let data_dir = app.path().app_data_dir()?;

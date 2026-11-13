@@ -29,6 +29,7 @@ export function App() {
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
+    document.documentElement.style.colorScheme = theme;
   }, [theme]);
 
   useEffect(() => {

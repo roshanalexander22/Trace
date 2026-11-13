@@ -76,7 +76,7 @@ export const DEFAULT_CALIBRATION: CalibrationProfile = {
   preferred_camera_id: null,
   mirror_feed: true,
   fps_cap: 60,
-  delegate: "GPU",
+  delegate: "NVIDIA",
 };
 
 export interface StrokeDto {
@@ -144,7 +144,7 @@ export interface SystemTelemetryDto {
   os_platform: string;
 }
 
-export type HardwareDelegate = "NVIDIA" | "CPU" | "iGPU";
+export type HardwareDelegate = "NVIDIA" | "CPU";
 
 export interface GpuInfoDto {
   active_preference: string;

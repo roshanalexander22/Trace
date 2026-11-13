@@ -169,6 +169,9 @@ export function AirCanvasWorkspace({
   const strokes = useDrawingStore((s) => s.strokes);
   const cameraMode = useDrawingStore((s) => s.cameraMode);
   const boardOpacity = useDrawingStore((s) => s.boardOpacity);
+  const cameraFit = useAppStore((s) => s.cameraFit);
+  const cameraFitRef = useRef(cameraFit);
+  cameraFitRef.current = cameraFit;
   const backgroundPattern = useDrawingStore((s) => s.backgroundPattern);
   const commitStroke = useDrawingStore((s) => s.commitStroke);
 
@@ -308,7 +311,7 @@ export function AirCanvasWorkspace({
         ev.metrics.videoHeight,
         rect.width,
         rect.height,
-        "cover",
+        cameraFitRef.current,
       );
 
       beginOrAdvanceStroke({
@@ -405,8 +408,8 @@ export function AirCanvasWorkspace({
               }`
         }
       >
-        <CameraPreview videoRef={videoRef} stream={stream} mirror={mirror} />
-        <HandSkeletonOverlay muted={boardOpacity > 0.55} />
+        <CameraPreview videoRef={videoRef} stream={stream} mirror={mirror} fit={cameraFit} />
+        <HandSkeletonOverlay muted={boardOpacity > 0.55} fit={cameraFit} />
       </div>
 
       {/* Layer 1.5: Adjustable Drawing Board Backdrop Opacity & Paper Pattern */}

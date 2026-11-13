@@ -16,9 +16,12 @@ pub struct GpuInfoDto {
 
 #[cfg(target_os = "windows")]
 pub fn apply_gpu_preference(preference: &str) -> Result<(), String> {
+    if preference == "CPU" {
+        return Ok(());
+    }
+
     let pref_val = match preference {
-        "NVIDIA" | "dGPU" | "GPU" => "GpuPreference=2;",
-        "iGPU" => "GpuPreference=1;",
+        "CPU" => return Ok(()),
         _ => "GpuPreference=2;",
     };
 
@@ -76,7 +79,7 @@ pub fn get_gpu_info() -> Result<GpuInfoDto, String> {
         let current_exe = std::env::current_exe().unwrap_or_default();
         let exe_path = current_exe.to_string_lossy().to_string();
 
-        let mut active_pref = "NVIDIA".to_string();
+        let mut active_pref = "GPU".to_string();
         let mut checked_paths = vec![exe_path];
         if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
             checked_paths.push(
@@ -99,20 +102,33 @@ pub fn get_gpu_info() -> Result<GpuInfoDto, String> {
                 .output()
             {
                 let text = String::from_utf8_lossy(&output.stdout);
-                if text.contains("GpuPreference=1") {
-                    active_pref = "iGPU".to_string();
-                    break;
-                } else if text.contains("GpuPreference=2") {
-                    active_pref = "NVIDIA".to_string();
+                if text.contains("GpuPreference=2") {
+                    active_pref = "GPU".to_string();
                     break;
                 }
             }
         }
 
-        let detected = vec![
-            "NVIDIA GeForce RTX 3050 6GB Laptop GPU".to_string(),
-            "AMD Radeon(TM) Graphics (Integrated iGPU)".to_string(),
-        ];
+        let mut detected = Vec::new();
+        if let Ok(output) = std::process::Command::new("powershell")
+            .args([
+                "-NoProfile",
+                "-Command",
+                "Get-CimInstance Win32_VideoController | Select-Object -ExpandProperty Name",
+            ])
+            .output()
+        {
+            let text = String::from_utf8_lossy(&output.stdout);
+            for line in text.lines() {
+                let trimmed = line.trim();
+                if !trimmed.is_empty() && !detected.contains(&trimmed.to_string()) {
+                    detected.push(trimmed.to_string());
+                }
+            }
+        }
+        if detected.is_empty() {
+            detected.push("Hardware GPU Adapter".to_string());
+        }
 
         Ok(GpuInfoDto {
             active_preference: active_pref,
@@ -133,7 +149,9 @@ pub fn get_gpu_info() -> Result<GpuInfoDto, String> {
 pub fn set_gpu_preference(preference: String) -> Result<bool, String> {
     #[cfg(target_os = "windows")]
     {
-        apply_gpu_preference(&preference)?;
+        std::thread::spawn(move || {
+            let _ = apply_gpu_preference(&preference);
+        });
         return Ok(true);
     }
     #[cfg(not(target_os = "windows"))]

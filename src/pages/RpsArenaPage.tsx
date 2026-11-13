@@ -1,6 +1,7 @@
 import { Play, RefreshCw, ShieldCheck } from "lucide-react";
 import { useCallback, useEffect, useRef, type RefObject } from "react";
 import { CameraPermissionGuard } from "../components/layout/CameraPermissionGuard";
+import { GameLayoutToolbar } from "../components/layout/GameLayoutToolbar";
 import { CountdownOverlay } from "../components/rps/CountdownOverlay";
 import { HandAnimation } from "../components/rps/HandAnimation";
 import { MatchResultBanner } from "../components/rps/MatchResultBanner";
@@ -31,6 +32,8 @@ export function RpsArenaPage({ camera, videoRef }: RpsArenaPageProps) {
   const mirror = useAppStore((s) => s.calibration.mirror_feed);
   const live = useAppStore((s) => s.live);
   const soundEnabled = useAppStore((s) => s.soundEnabled);
+  const gameLayout = useAppStore((s) => s.gameLayout);
+  const cameraFit = useAppStore((s) => s.cameraFit);
   const audio = useAudioFeedback(soundEnabled);
 
   const phase = useGameStore((s) => s.phase);
@@ -194,170 +197,245 @@ export function RpsArenaPage({ camera, videoRef }: RpsArenaPageProps) {
           : "amber"
       : "cyan";
 
+  const renderCameraStage = () => (
+    <div className="flex flex-col gap-3 min-w-0 flex-1 h-full">
+      <div
+        className="relative w-full flex-1 min-h-[340px] rounded-2xl overflow-hidden border shadow-sm flex flex-col"
+        style={{
+          backgroundColor: "var(--bg-well)",
+          borderColor: "var(--border-hairline)",
+        }}
+      >
+        {camera.error ? (
+          <CameraPermissionGuard
+            error={camera.error}
+            onRetry={() => void camera.startCamera(camera.activeDeviceId)}
+          />
+        ) : (
+          <>
+            <CameraPreview videoRef={videoRef} stream={camera.stream} mirror={mirror} />
+            <HandSkeletonOverlay fit={cameraFit} />
+            <CountdownOverlay
+              active={phase === "COUNTDOWN" || phase === "CAPTURE"}
+              value={countdownValue}
+            />
+          </>
+        )}
+
+        {/* Top-Left: Player Live Sign Badge */}
+        <div
+          className="absolute top-3 left-3 z-20 flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-medium backdrop-blur-md"
+          style={{
+            backgroundColor: "var(--bg-surface)",
+            borderColor: "var(--border-hairline)",
+            color: "var(--text-primary)",
+          }}
+        >
+          <span style={{ color: "var(--text-secondary)" }}>Your Hand:</span>
+          <span
+            className="font-semibold"
+            style={{ color: detectedRps ? "var(--status-ready)" : "var(--text-primary)" }}
+          >
+            {detectedRps ?? (live.detected ? "Adjusting..." : "No Hand")}
+          </span>
+        </div>
+
+        {/* Top-Right: Pre-Commitment Badge */}
+        {commitmentSha256 && phase === "COUNTDOWN" && (
+          <div
+            className="absolute top-3 right-3 z-20 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11px] font-semibold backdrop-blur-md"
+            style={{
+              backgroundColor: "var(--bg-surface)",
+              borderColor: "var(--border-hairline)",
+              color: "var(--status-ready)",
+            }}
+          >
+            <ShieldCheck className="w-3.5 h-3.5" strokeWidth={1.5} />
+            <span>Move Pre-Locked</span>
+          </div>
+        )}
+
+        {/* Floating HUD Inside Bottom of Frame */}
+        <div
+          className="absolute inset-x-3 bottom-3 z-20 flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-xl border backdrop-blur-md"
+          style={{
+            backgroundColor: "var(--bg-surface)",
+            borderColor: "var(--border-hairline)",
+          }}
+        >
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => void startRound()}
+              disabled={phase === "COUNTDOWN" || phase === "CAPTURE" || Boolean(camera.error)}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold interactive-control disabled:opacity-50"
+              style={{
+                backgroundColor: "var(--accent-primary)",
+                color: "var(--accent-contrast)",
+              }}
+            >
+              {phase === "REVEAL" || phase === "NO_GESTURE_RETRY" ? (
+                <>
+                  <RefreshCw className="w-3.5 h-3.5" strokeWidth={1.5} />
+                  <span>Play Again</span>
+                </>
+              ) : (
+                <>
+                  <Play className="w-3.5 h-3.5" strokeWidth={1.5} />
+                  <span>Start Countdown</span>
+                </>
+              )}
+            </button>
+
+            <label
+              className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg border text-xs cursor-pointer interactive-control"
+              style={{
+                backgroundColor: "var(--bg-well)",
+                borderColor: "var(--border-hairline)",
+                color: "var(--text-secondary)",
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={autoNextRound}
+                onChange={(e) => setAutoNextRound(e.target.checked)}
+                className="accent-[var(--accent-primary)] rounded w-3.5 h-3.5"
+              />
+              <span>Auto-Next</span>
+            </label>
+          </div>
+
+          <span
+            className="hidden sm:inline-block text-[11px]"
+            style={{ color: "var(--text-secondary)" }}
+          >
+            Show ✊ Rock, ✋ Paper, or ✌️ Scissors at{" "}
+            <strong style={{ color: "var(--text-primary)" }}>SHOOT!</strong>
+          </span>
+        </div>
+      </div>
+
+      {phase === "NO_GESTURE_RETRY" && (
+        <div
+          className="p-3 rounded-xl border text-xs"
+          style={{
+            backgroundColor: "var(--bg-well)",
+            borderColor: "var(--border-hairline)",
+            color: "var(--accent-primary)",
+          }}
+        >
+          No valid Rock, Paper, or Scissors gesture was detected at capture. Keep your hand inside
+          the frame and hit Play Again.
+        </div>
+      )}
+
+      <MatchResultBanner result={lastResult} />
+    </div>
+  );
+
+  const renderOpponentStage = (compact = false) => (
+    <div
+      className={`flex flex-col items-center justify-center rounded-2xl border ${
+        compact ? "p-3" : "p-4 sm:p-5"
+      }`}
+      style={{
+        backgroundColor: "var(--bg-surface)",
+        borderColor: "var(--border-hairline)",
+      }}
+    >
+      <div
+        className="mb-1 text-[10px] font-bold tracking-wider uppercase"
+        style={{ color: "var(--text-secondary)" }}
+      >
+        AI Opponent Stage
+      </div>
+
+      <HandAnimation
+        pose={aiPose}
+        beat={countdownValue}
+        accent={aiAccent}
+        sizeClass={compact ? "h-28 w-28" : "h-36 w-36 sm:h-40 sm:w-40"}
+      />
+
+      <div className="mt-1 text-xs font-semibold" style={{ color: "var(--text-primary)" }}>
+        {phase === "COUNTDOWN"
+          ? "Locking Gesture..."
+          : phase === "REVEAL" && lastResult
+            ? `AI Played: ${lastResult.ai_move}`
+            : "Ready for Next Round"}
+      </div>
+    </div>
+  );
+
+  const renderScoreboard = (orientation: "vertical" | "horizontal" = "vertical") => (
+    <Scoreboard
+      scoreboard={scoreboard}
+      onReset={() => void handleResetScores()}
+      orientation={orientation}
+      className={orientation === "vertical" ? "flex-1 min-h-0" : ""}
+    />
+  );
+
   return (
     <div
-      className="h-full w-full overflow-y-auto p-4 sm:p-5 select-none"
+      className="h-full w-full overflow-hidden p-3 sm:p-4 select-none flex flex-col gap-3"
       style={{
         backgroundColor: "var(--bg-canvas)",
         color: "var(--text-primary)",
       }}
     >
-      <div className="mx-auto max-w-7xl h-full grid gap-4 lg:grid-cols-[1.38fr_1fr]">
-        {/* Left 58%: Rounded Camera Stage (16px radius) with HUD Controls Floating Inside */}
-        <div className="flex flex-col gap-3 min-w-0">
-          <div
-            className="relative w-full aspect-[4/3] sm:aspect-video rounded-2xl overflow-hidden border shadow-sm"
-            style={{
-              backgroundColor: "var(--bg-well)",
-              borderColor: "var(--border-hairline)",
-            }}
-          >
-            {camera.error ? (
-              <CameraPermissionGuard
-                error={camera.error}
-                onRetry={() => void camera.startCamera(camera.activeDeviceId)}
-              />
-            ) : (
-              <>
-                <CameraPreview videoRef={videoRef} stream={camera.stream} mirror={mirror} />
-                <HandSkeletonOverlay />
-                <CountdownOverlay active={phase === "COUNTDOWN" || phase === "CAPTURE"} value={countdownValue} />
-              </>
-            )}
-
-            {/* Top-Left: Player Live Sign Badge */}
-            <div
-              className="absolute top-3 left-3 z-20 flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-medium backdrop-blur-md"
-              style={{
-                backgroundColor: "var(--bg-surface)",
-                borderColor: "var(--border-hairline)",
-                color: "var(--text-primary)",
-              }}
-            >
-              <span style={{ color: "var(--text-secondary)" }}>Your Hand:</span>
-              <span className="font-semibold" style={{ color: detectedRps ? "var(--status-ready)" : "var(--text-primary)" }}>
-                {detectedRps ?? (live.detected ? "Adjusting..." : "No Hand")}
-              </span>
-            </div>
-
-            {/* Top-Right: Pre-Commitment Badge */}
-            {commitmentSha256 && phase === "COUNTDOWN" && (
-              <div
-                className="absolute top-3 right-3 z-20 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11px] font-semibold backdrop-blur-md"
-                style={{
-                  backgroundColor: "var(--bg-surface)",
-                  borderColor: "var(--border-hairline)",
-                  color: "var(--status-ready)",
-                }}
-              >
-                <ShieldCheck className="w-3.5 h-3.5" strokeWidth={1.5} />
-                <span>Move Pre-Locked</span>
-              </div>
-            )}
-
-            {/* Floating HUD Inside Bottom of Frame (Eyes Stay Locked on Hand Feed!) */}
-            <div className="absolute inset-x-3 bottom-3 z-20 flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-xl border backdrop-blur-md"
-              style={{
-                backgroundColor: "var(--bg-surface)",
-                borderColor: "var(--border-hairline)",
-              }}
-            >
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => void startRound()}
-                  disabled={phase === "COUNTDOWN" || phase === "CAPTURE" || Boolean(camera.error)}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold interactive-control disabled:opacity-50"
-                  style={{
-                    backgroundColor: "var(--accent-primary)",
-                    color: "var(--accent-contrast)",
-                  }}
-                >
-                  {phase === "REVEAL" || phase === "NO_GESTURE_RETRY" ? (
-                    <>
-                      <RefreshCw className="w-3.5 h-3.5" strokeWidth={1.5} />
-                      <span>Play Again</span>
-                    </>
-                  ) : (
-                    <>
-                      <Play className="w-3.5 h-3.5" strokeWidth={1.5} />
-                      <span>Start Countdown</span>
-                    </>
-                  )}
-                </button>
-
-                <label
-                  className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg border text-xs cursor-pointer interactive-control"
-                  style={{
-                    backgroundColor: "var(--bg-well)",
-                    borderColor: "var(--border-hairline)",
-                    color: "var(--text-secondary)",
-                  }}
-                >
-                  <input
-                    type="checkbox"
-                    checked={autoNextRound}
-                    onChange={(e) => setAutoNextRound(e.target.checked)}
-                    className="accent-[var(--accent-primary)] rounded w-3.5 h-3.5"
-                  />
-                  <span>Auto-Next</span>
-                </label>
-              </div>
-
-              <span className="hidden sm:inline-block text-[11px]" style={{ color: "var(--text-secondary)" }}>
-                Show ✊ Rock, ✋ Paper, or ✌️ Scissors at <strong style={{ color: "var(--text-primary)" }}>SHOOT!</strong>
-              </span>
-            </div>
-          </div>
-
-          {phase === "NO_GESTURE_RETRY" && (
-            <div
-              className="p-3 rounded-xl border text-xs"
-              style={{
-                backgroundColor: "var(--bg-well)",
-                borderColor: "var(--border-hairline)",
-                color: "var(--accent-primary)",
-              }}
-            >
-              No valid Rock, Paper, or Scissors gesture was detected at capture. Keep your hand inside the frame and hit Play Again.
-            </div>
-          )}
-
-          <MatchResultBanner result={lastResult} />
+      {/* Top Controls Sub-bar with Layout Toolbar */}
+      <div className="flex flex-wrap items-center justify-between gap-2 shrink-0">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-semibold" style={{ color: "var(--text-primary)" }}>
+            RPS Arena
+          </span>
+          <span className="text-xs hidden sm:inline" style={{ color: "var(--text-secondary)" }}>
+            — 3-2-1 Animated Showdown
+          </span>
         </div>
 
-        {/* Right 42%: Opponent Stage (Clean Geometric Target Frame) + Scoreboard */}
-        <div className="flex flex-col gap-3 min-w-0">
-          <div
-            className="flex flex-col items-center justify-center p-5 rounded-2xl border"
-            style={{
-              backgroundColor: "var(--bg-surface)",
-              borderColor: "var(--border-hairline)",
-            }}
-          >
-            <div
-              className="mb-1 text-[10px] font-bold tracking-wider uppercase"
-              style={{ color: "var(--text-secondary)" }}
-            >
-              AI Opponent Stage
+        <GameLayoutToolbar />
+      </div>
+
+      {/* Main Dynamic Filled Arena Grid */}
+      <div className="flex-1 w-full min-h-0 flex flex-col">
+        {gameLayout === "stadium" ? (
+          <div className="flex flex-col gap-3 h-full min-h-0 flex-1">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 flex-1 min-h-[300px]">
+              {renderCameraStage()}
+              <div className="flex flex-col gap-3 min-w-0">
+                {renderOpponentStage()}
+              </div>
             </div>
-
-            <HandAnimation pose={aiPose} beat={countdownValue} accent={aiAccent} sizeClass="h-40 w-40" />
-
-            <div
-              className="mt-1 text-xs font-semibold"
-              style={{ color: "var(--text-primary)" }}
-            >
-              {phase === "COUNTDOWN"
-                ? "Locking Gesture..."
-                : phase === "REVEAL" && lastResult
-                  ? `AI Played: ${lastResult.ai_move}`
-                  : "Ready for Next Round"}
+            {renderScoreboard("horizontal")}
+          </div>
+        ) : gameLayout === "camera-right" ? (
+          <div className="grid grid-cols-1 lg:grid-cols-[1fr_1.38fr] gap-3 h-full min-h-0 flex-1">
+            <div className="flex flex-col gap-3 min-w-0 h-full min-h-0">
+              {renderOpponentStage()}
+              {renderScoreboard("vertical")}
+            </div>
+            {renderCameraStage()}
+          </div>
+        ) : gameLayout === "cinema" ? (
+          <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-3 h-full min-h-0 flex-1">
+            {renderCameraStage()}
+            <div className="flex flex-col gap-3 min-w-0 h-full min-h-0 overflow-y-auto">
+              {renderOpponentStage(true)}
+              {renderScoreboard("vertical")}
             </div>
           </div>
-
-          <Scoreboard scoreboard={scoreboard} onReset={() => void handleResetScores()} />
-        </div>
+        ) : (
+          /* Default "camera-left" */
+          <div className="grid grid-cols-1 lg:grid-cols-[1.38fr_1fr] gap-3 h-full min-h-0 flex-1">
+            {renderCameraStage()}
+            <div className="flex flex-col gap-3 min-w-0 h-full min-h-0">
+              {renderOpponentStage()}
+              {renderScoreboard("vertical")}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
